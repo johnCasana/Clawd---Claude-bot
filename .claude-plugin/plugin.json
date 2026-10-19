@@ -1,0 +1,7 @@
+{
+  "name": "clawd-hud",
+  "version": "0.1.0",
+  "description": "Tablero sobre el prompt con tu uso 5h y 7d, recargas, contexto, tokens y costo, con medidores de ritmo y un Clawd animado que cambia de rol según lo que hace Claude.",
+  "author": { "name": "johnCasana", "url": "https://github.com/johnCasana" },
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "clawd",
+  "owner": {
+    "name": "johnCasana"
+  },
+  "metadata": {
+    "description": "Clawd HUD: uso, contexto y costo de Claude Code con un Clawd animado"
+  },
+  "plugins": [
+    {
+      "name": "clawd-hud",
+      "source": "./"
+    }
+  ]
+}
