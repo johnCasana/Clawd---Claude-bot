@@ -187,13 +187,20 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   return toBase64(words)
 }
 
-// A background task's icon: a mini Clawd at work, then its tool: a subagent's marching trail, a shell's spinner,
-// a monitor's waves, else a turning disc. The Clawd waves for a subagent and types (arms in turn) for the rest.
-export const TASK_ICON_COLS = 5
+// A background task's icon: the 3-row mini Clawd at work, its tool on the top row beside it. It marches and
+// waves for a subagent, types (arms in turn) for a shell, glances up at its waves for a monitor, else walks.
+export const TASK_ICON = { columns: MINI.columns + 3, rows: MINI.rows }
 const SPIN = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏']
 export function taskIcon(kind: string, frame: number): string {
   const step = (frame >> 1) % 2
-  const clawd = kind === 'subagent' ? (step ? '▝█▘' : '▗█▖') : step ? '▗█▘' : '▝█▖'
+  const [head = [], arms = [], legs = []] = MINI_ART.map(row => [...row])
+  if (kind === 'shell') (arms[0] = step ? '▗' : '▝'), (arms[8] = step ? '▘' : '▖')
+  else if (kind === 'monitor') step && ((head[2] = '▙'), (head[6] = '▟'))
+  else if (step) {
+    legs.splice(0, legs.length, ...MINI_STRIDE)
+    if (kind === 'subagent') (arms[8] = ' '), (head[8] = '▖')
+  }
+  if (frame % 12 === 0) (head[2] = '█'), (head[6] = '█')
   const [prop, fg] =
     kind === 'subagent'
       ? [['  ', '› ', '»›'][(frame >> 1) % 3] ?? '  ', COLORS.o!]
@@ -202,9 +209,12 @@ export function taskIcon(kind: string, frame: number): string {
         : kind === 'monitor'
           ? [['◉ ', '◉)'][step] ?? '◉ ', COLORS.c!]
           : [`${['◐', '◓', '◑', '◒'][frame % 4] ?? '◐'} `, COLORS.y!]
-  const words = new Uint32Array(TASK_ICON_COLS * 3)
-  ;[...clawd].forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, COLORS.o!, NONE], c * 3))
-  ;[...prop.padEnd(2)].slice(0, 2).forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, fg, NONE], (c + 3) * 3))
+  const words = new Uint32Array(TASK_ICON.columns * TASK_ICON.rows * 3)
+  const put = (r: number, c: number, ch: string, color: number) =>
+    words.set([ch.codePointAt(0) ?? 0x20, color, NONE], (r * TASK_ICON.columns + c) * 3)
+  for (let r = 0; r < TASK_ICON.rows; r++) for (let c = 0; c < TASK_ICON.columns; c++) put(r, c, ' ', NONE)
+  ;[head, arms, legs].forEach((row, r) => row.forEach((ch, c) => put(r, c, ch, COLORS.o!)))
+  ;[...prop.padEnd(2)].slice(0, 2).forEach((ch, c) => put(0, MINI.columns + 1 + c, ch, fg))
   return toBase64(words)
 }
 

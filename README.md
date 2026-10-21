@@ -45,7 +45,7 @@ In the desktop app: click **+** next to the prompt → **Plugins** → **Add mar
 | **Cost** | Session cost and cost per hour. |
 | **Session** | Duration, edits, commands and tools used. |
 | **Path** | The directory Claude works in and, after a `git push`, the branch and the repository it went to (`owner/repo` only, never the remote URL). |
-| **Background** | A column on the right, from 150 columns, while background work runs: each task with a mini Clawd at work and its tool (it waves and marches `»›` for a subagent, types at `$ ⠋` for a shell, watches `◉)` for a monitor), its description and how long it has run. Narrower, the Session row counts them (`⧗ 2 in background`). |
+| **Background** | A column on the right, from 150 columns, while background work runs: each task with a 3-row Clawd at work and its tool (it waves and marches `»›` for a subagent, types at `$ ⠋` for a shell, glances up at `◉)` for a monitor, walks for the rest), its description and how long it has run. Two tasks fit; the rest show as `+N more`. Narrower, the Session row counts them (`⧗ 2 in background`). |
 
 The gauges go from green to red. The white `▏` mark shows where you *should* be given the time elapsed in the window: if the bar passes the mark, at that pace you run out of quota before the reset.
 

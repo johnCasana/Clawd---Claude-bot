@@ -11,7 +11,7 @@ import type {
 
 import type { Activity, Role, Task } from '../types'
 import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
-import { BIG, MINI, TASK_ICON_COLS, bigFrame, gaugeCells, miniFrame, taskIcon } from './sprites'
+import { BIG, MINI, TASK_ICON, bigFrame, gaugeCells, miniFrame, taskIcon } from './sprites'
 
 const SLEEP_AFTER = 60_000
 const CELEBRATE = 8_000
@@ -199,8 +199,8 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const cost = usage.cost ? `$${usage.cost.usd.toFixed(2)}` : '—'
   const costRate = usage.cost && hours >= 0.1 ? ` · $${(usage.cost.usd / hours).toFixed(2)}/h` : ''
   const hasBgColumn = isWide && bg.length > 0 && width >= BG_MIN_WIDTH
-  // Eight rows: the title and seven tasks, or six and a count of the rest.
-  const bgShown = bg.length > 7 ? bg.slice(0, 6) : bg
+  // Eight rows: the title, two tasks of three rows each, and a count of the rest.
+  const bgShown = bg.slice(0, 2)
   bgKinds = hasBgColumn && e.surface === 'terminal' ? bgShown.map(t => t.kind) : []
   const bgNote = bg.length && !hasBgColumn ? ` · ⧗ ${bg.length} in background` : ''
   const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} edits · ${cnt.commands} commands · ${cnt.tools} tools${bgNote}`
@@ -272,7 +272,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const taskMark = (kind: string, i: number) => {
     if (e.surface !== 'terminal') return <Text color="claude">•</Text>
     const { Raster } = $.ui.resolve(e)
-    return <Raster key={`bg-${i}`} columns={TASK_ICON_COLS} rows={1} cells={taskIcon(kind, frame)} />
+    return <Raster key={`bg-${i}`} columns={TASK_ICON.columns} rows={TASK_ICON.rows} cells={taskIcon(kind, frame)} />
   }
 
   // Beside the mascot, inside the round border and its padding, after the label column.
@@ -353,10 +353,10 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
             return (
               <Box key={t.id} flexDirection="row" gap={1}>
                 {taskMark(t.kind, i)}
-                <Text wrap="truncate-end">
-                  {clip(t.label, BG_COLS - TASK_ICON_COLS - 1 - dur.length - 1)}
-                  <Text dimColor> {dur}</Text>
-                </Text>
+                <Box flexDirection="column" flexShrink={1}>
+                  <Text wrap="truncate-end">{clip(t.label, BG_COLS - TASK_ICON.columns - 1)}</Text>
+                  <Text dimColor>{dur}</Text>
+                </Box>
               </Box>
             )
           })}

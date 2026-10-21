@@ -191,12 +191,20 @@ test('background work gets a column with an icon per task; the list at Stop is t
 
   await $.classic.Stop({
     stop_hook_active: false,
-    background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Review auth' }],
+    background_tasks: [
+      { id: 'a1', type: 'subagent', status: 'running', description: 'Review auth' },
+      { id: 'm1', type: 'monitor', status: 'running', description: 'Watch logs' },
+      { id: 'w1', type: 'workflow', status: 'running', description: 'Release' },
+    ],
   })
+  // Each task is a 3-row Clawd: two fit, the rest are counted.
   ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /Dev server/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Review auth/ })).toBeDefined()
   expect((await ui.find({ key: 'bg-0' }))?.props.cells).toBe(taskIcon('subagent', 0))
+  expect((await ui.find({ key: 'bg-1' }))?.props.cells).toBe(taskIcon('monitor', 0))
+  expect(await ui.find({ type: 'Text', text: /Release/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\+1 more/ })).toBeDefined()
   await ui.unmount()
 
   await $.classic.Stop({ stop_hook_active: false, background_tasks: [] })
