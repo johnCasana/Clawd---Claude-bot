@@ -13,7 +13,7 @@ export function fmtDur(ms: number): string {
   const d = Math.floor(total / 1440)
   const h = Math.floor((total % 1440) / 60)
   const m = total % 60
-  return d ? `${d}d ${h}h` : h ? `${h}h${pad(m)}m` : `${m}m`
+  return d ? `${d}d ${h}h` : h ? `${h}h${pad(m)}m` : m ? `${m}m` : `${Math.max(0, Math.floor(ms / 1000))}s`
 }
 
 export function fmtWhen(at: number, now: number): string {

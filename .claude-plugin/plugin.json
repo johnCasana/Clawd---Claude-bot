@@ -1,6 +1,6 @@
 {
   "name": "clawd-hud",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Dashboard above the prompt with your 5h and 7d usage, resets, context, model and effort, tokens and cost, with pace gauges and an animated Clawd that changes role based on what Claude is doing.",
   "author": { "name": "johnCasana", "url": "https://github.com/johnCasana" },
   "types": "./types/index.d.ts"

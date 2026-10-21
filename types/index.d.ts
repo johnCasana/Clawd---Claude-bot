@@ -13,6 +13,7 @@ export type Activity = { role: Role; since: number }
 export type Tokens = { input: number; output: number }
 export type Counts = { edits: number; commands: number; tools: number }
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | number
+export type Call = { id: string; tool: string; since: number }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -20,6 +21,8 @@ declare module 'claude-code' {
       now: number
       activity: Activity
       tokens: Tokens
+      cached: number
+      running: Call[]
       counts: Counts
       effort: Effort | null
       warned: string[]

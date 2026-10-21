@@ -8,7 +8,7 @@ A mod for [Claude Code](https://claude.com/claude-code) that shows your usage KP
 │   Clawd]   7d       █▊░░░░░░░░░░░░  21%  79% left · ↻ Thu 23 09:00 (3d 4h)                         │
 │            Context  ██████░░░░░░░░  44%  88k / 200k · 112k left                                    │
 │            Model    Opus 5.5 · effort high                                                         │
-│            Tokens   1.2M input · 84k output · 1.3M total                                           │
+│            Tokens   1.2M input · 84k output · 1.3M total · 72% cached                              │
 │            Cost     $3.42 · $1.20/h                                                                │
 │            Session  1h23m · 12 edits · 30 commands · 85 tools                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -40,7 +40,7 @@ In the desktop app: click **+** next to the prompt → **Plugins** → **Add mar
 | **7d** | Weekly usage, % left and reset date. |
 | **Context** | Context window: tokens used, total size and tokens left. |
 | **Model** | Model in use (as `/model` shows it) and the effort of the last request (`/effort`). |
-| **Tokens** | Session input, output and total tokens. |
+| **Tokens** | Session input, output and total tokens, and the share of input served from the prompt cache. |
 | **Cost** | Session cost and cost per hour. |
 | **Session** | Duration, edits, commands and tools used. |
 
@@ -50,7 +50,7 @@ Past 90% in 5h or 7d, Clawd turns red and sweats, and a warning shows once per w
 
 ## Clawd's roles
 
-The role is not written out: you see it in Clawd's animation.
+The role is not written out: you see it in Clawd's animation and in the card's border, which takes the role's color (gray while Clawd sleeps). While a tool runs, its name and elapsed time show under Clawd (`⏵ Bash · 12s`); in the compact version they follow the model.
 
 | Claude's activity | Role | Animation |
 | --- | --- | --- |

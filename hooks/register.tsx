@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderInput, SessionRateLimit, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderInput, SessionRateLimit, ThemeKey, Timer } from 'claude-code'
 
 import type { Activity, Role } from '../types'
 import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
@@ -8,10 +8,25 @@ import { BIG, MINI, bigFrame, gaugeCells, miniFrame } from './sprites'
 const SLEEP_AFTER = 60_000
 const EDIT_TOOLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/
 const REVIEW = /review|audit|revis|security/i
+// The card's border takes the role's color; the operator matches the Bash prompt's border.
+const ROLE_COLORS: Record<Role, ThemeKey> = {
+  engineer: 'claude',
+  auditor: 'merged',
+  detective: 'ide',
+  operator: 'bashBorder',
+  explorer: 'planMode',
+  director: 'permission',
+  thinker: 'remember',
+  idle: 'claude',
+  sleep: 'subtle',
+}
 
 const now = atom({ plugin: 'clawd-hud', key: 'now' } as const, 0)
 const activity = atom({ plugin: 'clawd-hud', key: 'activity' } as const, { role: 'idle', since: 0 })
 const tokens = atom({ plugin: 'clawd-hud', key: 'tokens' } as const, { input: 0, output: 0 })
+const cached = atom({ plugin: 'clawd-hud', key: 'cached' } as const, 0)
+// The main loop's calls in flight; the newest is captioned with its elapsed time.
+const running = atom({ plugin: 'clawd-hud', key: 'running' } as const, [])
 const counts = atom({ plugin: 'clawd-hud', key: 'counts' } as const, { edits: 0, commands: 0, tools: 0 })
 const effort = atom({ plugin: 'clawd-hud', key: 'effort' } as const, null)
 const warned = atom({ plugin: 'clawd-hud', key: 'warned' } as const, [])
@@ -54,6 +69,7 @@ let frame = 0
 let bandId: string | undefined
 let isBandWide = false
 let agentsRunning = 0
+let callsRunning = 0
 let timers: Timer[] = []
 
 async function setActivity($: EngineInterface, role: Role) {
@@ -76,17 +92,24 @@ function animate($: EngineInterface) {
 
 async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: boolean, width: number) {
   const { Box, Text } = $.ui.resolve(e)
-  const [at, a, tok, cnt, eff, model, usage] = await Promise.all([
+  const [at, a, tok, cache, calls, cnt, eff, model, usage] = await Promise.all([
     read($, now),
     read($, activity),
     read($, tokens),
+    read($, cached),
+    read($, running),
     read($, counts),
     read($, effort),
     $.session.model(),
     $.session.usage(),
   ])
-  const effortText = eff === null ? '' : ` · effort ${eff}`
   const role = shownRole(a, at)
+  const call = calls[calls.length - 1]
+  const doing = call ? `⏵ ${call.tool.replace(/^mcp__.*__/, '')} · ${fmtDur(at - call.since)}` : ''
+  // The wide terminal card captions Clawd with the call; elsewhere it follows the model.
+  const isCaptioned = isWide && e.surface === 'terminal'
+  const effortText = (eff === null ? '' : ` · effort ${eff}`) + (doing && !isCaptioned ? `  ${doing}` : '')
+  const cachedText = tok.input ? ` · ${Math.round((cache / tok.input) * 100)}% cached` : ''
   const five = usage.rateLimits.find(r => r.kind === 'five_hour')
   const seven = usage.rateLimits.find(r => r.kind === 'seven_day')
   const mark = (r: SessionRateLimit | undefined, span: number) =>
@@ -122,7 +145,10 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   if (e.surface === 'terminal') {
     const { Raster } = $.ui.resolve(e)
     art = isWide ? (
-      <Raster key="clawd" columns={BIG.columns} rows={BIG.rows} cells={bigFrame(role, frame, isAlarm)} />
+      <Box flexDirection="column" alignItems="center" width={BIG.columns}>
+        <Raster key="clawd" columns={BIG.columns} rows={BIG.rows} cells={bigFrame(role, frame, isAlarm)} />
+        <Text color={ROLE_COLORS[role]}>{clip(doing, BIG.columns)}</Text>
+      </Box>
     ) : (
       <Raster key="clawd-mini" columns={MINI.columns} rows={MINI.rows} cells={miniFrame(role, frame, isAlarm)} />
     )
@@ -151,7 +177,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
             <Text dimColor>{effortText}</Text>
           </Text>
           <Text dimColor wrap="truncate-end">
-            {fmtTokens(tok.input)} input · {fmtTokens(tok.output)} output · {cost}
+            {fmtTokens(tok.input)} input · {fmtTokens(tok.output)} output{cachedText} · {cost}
             {costRate} · {session}
           </Text>
         </Box>
@@ -183,7 +209,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
       : `${fmtTokens(ctx.tokens)} / ${fmtTokens(ctx.window)} · ${fmtTokens(Math.max(0, ctx.window - ctx.tokens))} left`
 
   return (
-    <Box flexDirection="row" gap={2} borderStyle="round" borderColor="claude" paddingX={1}>
+    <Box key="card" flexDirection="row" gap={2} borderStyle="round" borderColor={ROLE_COLORS[role]} paddingX={1}>
       {art}
       <Box flexDirection="column" flexShrink={1}>
         {meter('5h', 'g5', five?.percentUsed, m5, reset(five))}
@@ -200,7 +226,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
           {label('Tokens')}
           <Text wrap="truncate-end">
             <Text bold>{fmtTokens(tok.input)}</Text> input · <Text bold>{fmtTokens(tok.output)}</Text> output
-            <Text dimColor>{clip(` · ${fmtTokens(tok.input + tok.output)} total`, textCols - 30)}</Text>
+            <Text dimColor>{clip(` · ${fmtTokens(tok.input + tok.output)} total${cachedText}`, textCols - 30)}</Text>
           </Text>
         </Box>
         <Box flexDirection="row" gap={1}>
@@ -229,9 +255,16 @@ export const register: Register = on => {
     act = await read($, activity)
     if (!act.since) await setActivity($, 'idle')
     isAlarm = isHot((await $.session.usage()).rateLimits)
+    // A reload drops the hooks that would end the calls listed before it.
+    await update($, running, () => [])
     await refresh($)
     for (const timer of timers) timer.cancel()
-    timers = [$.clock.every(200, () => animate($)), $.clock.every(30_000, () => void refresh($))]
+    timers = [
+      $.clock.every(200, () => animate($)),
+      $.clock.every(30_000, () => void refresh($)),
+      // Tick the caption's seconds only while a call runs.
+      $.clock.every(1_000, () => void (callsRunning && refresh($))),
+    ]
 
     return next(e)
   })
@@ -256,13 +289,20 @@ export const register: Register = on => {
     }))
     // A subagent's own calls keep the role of the Agent call that spawned it.
     if (!(e.agentId && agentsRunning > 0)) await setActivity($, classify(e as unknown as Record<string, unknown>))
-    if (e.tool !== 'Agent') return next(e)
-
-    agentsRunning += 1
+    const call = e.agentId ? undefined : { id: e.tool_use_id, tool: e.tool, since: await $.clock.now() }
+    if (call) {
+      callsRunning += 1
+      await update($, running, r => [...r, call])
+    }
+    if (e.tool === 'Agent') agentsRunning += 1
     try {
       return await next(e)
     } finally {
-      agentsRunning -= 1
+      if (e.tool === 'Agent') agentsRunning -= 1
+      if (call) {
+        callsRunning -= 1
+        await update($, running, r => r.filter(c => c.id !== call.id))
+      }
     }
   }).catch(($, e, next) => next(e)) // the HUD never blocks a tool
 
@@ -273,6 +313,7 @@ export const register: Register = on => {
         input: t.input + u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens,
         output: t.output + u.output_tokens,
       }))
+      await update($, cached, c => c + u.cache_read_input_tokens)
     }
     if (!e.agentId) await setActivity($, 'idle')
 

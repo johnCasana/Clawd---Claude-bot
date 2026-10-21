@@ -24,7 +24,7 @@ const BAND = {
 const NARROW = { ...BAND, props: { ...BAND.props, bodyColumns: 80 } } as const
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
-function engine(on: On) {
+function engine(on: On, whileCalling = async () => {}) {
   mock.clock(on, { now: NOW })
   on('command.register', () => ({ value: { command: 'hud' } }))
   on('ui.close', () => ({ value: undefined }))
@@ -35,7 +35,10 @@ function engine(on: On) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('tool.call', () => ({ result: {} }))
+  on('tool.call', async () => {
+    await whileCalling()
+    return { result: {} }
+  })
 }
 
 test('elapsedPct places the marker', () => {
@@ -96,6 +99,27 @@ test('the model row shows the model and the effort of the last main-loop request
     expect(await ui.find({ type: 'Text', text: /effort xhigh/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('a running call captions Clawd and the border takes its role color', async ($, on) => {
+  let caption: unknown
+  let border: unknown
+  engine(on, async () => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    caption = await ui.find({ type: 'Text', text: /⏵ Bash · 0s/ })
+    border = (await ui.find({ key: 'card' }))?.props.borderColor
+    await ui.unmount()
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  expect(caption).toBeDefined()
+  expect(border).toBe('bashBorder')
+
+  // Done, the caption goes; the operator's border stays until the next role.
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /⏵/ })).toBeUndefined()
+  expect((await ui.find({ key: 'card' }))?.props.borderColor).toBe('bashBorder')
+  await ui.unmount()
 })
 
 test('/hud hides the band and shows it again', async ($, on) => {
