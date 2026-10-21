@@ -1,11 +1,20 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderInput, SessionRateLimit, ThemeKey, Timer } from 'claude-code'
+import type {
+  BuiltinToolResults,
+  EngineInterface,
+  Register,
+  RenderInput,
+  SessionRateLimit,
+  ThemeKey,
+  Timer,
+} from 'claude-code'
 
 import type { Activity, Role } from '../types'
 import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
 import { BIG, MINI, bigFrame, gaugeCells, miniFrame } from './sprites'
 
 const SLEEP_AFTER = 60_000
+const CELEBRATE = 8_000
 const EDIT_TOOLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/
 const REVIEW = /review|audit|revis|security/i
 // The card's border takes the role's color; the operator matches the Bash prompt's border.
@@ -17,6 +26,7 @@ const ROLE_COLORS: Record<Role, ThemeKey> = {
   explorer: 'planMode',
   director: 'permission',
   thinker: 'remember',
+  shipper: 'success',
   idle: 'claude',
   sleep: 'subtle',
 }
@@ -27,6 +37,7 @@ const tokens = atom({ plugin: 'clawd-hud', key: 'tokens' } as const, { input: 0,
 const cached = atom({ plugin: 'clawd-hud', key: 'cached' } as const, 0)
 // The main loop's calls in flight; the newest is captioned with its elapsed time.
 const running = atom({ plugin: 'clawd-hud', key: 'running' } as const, [])
+const push = atom({ plugin: 'clawd-hud', key: 'push' } as const, null)
 const counts = atom({ plugin: 'clawd-hud', key: 'counts' } as const, { edits: 0, commands: 0, tools: 0 })
 const effort = atom({ plugin: 'clawd-hud', key: 'effort' } as const, null)
 const warned = atom({ plugin: 'clawd-hud', key: 'warned' } as const, [])
@@ -36,7 +47,13 @@ const windowName = (kind: string) => (kind === 'five_hour' ? '5h' : kind === 'se
 const isHot = (limits: readonly SessionRateLimit[]) => limits.some(r => r.percentUsed >= 90)
 // Cut to n columns ourselves: a row whose text overflows next to a Raster wraps to two rows, truncated or not.
 const clip = (text: string, n: number) => ([...text].length <= n ? text : [...text].slice(0, Math.max(0, n - 1)).join('') + '…')
-const shownRole = (a: Activity, at: number): Role => (a.role === 'idle' && at - a.since > SLEEP_AFTER ? 'sleep' : a.role)
+// A path keeps its tail, where the folder's own name is.
+function tail(text: string, n: number) {
+  const chars = [...text]
+  return chars.length <= n ? text : '…' + chars.slice(chars.length - n + 1).join('')
+}
+const shownRole = (a: Activity, at: number): Role =>
+  at - pushedAt < CELEBRATE ? 'shipper' : a.role === 'idle' && at - a.since > SLEEP_AFTER ? 'sleep' : a.role
 
 function classify(e: Record<string, unknown>): Role {
   const tool = String(e.tool)
@@ -70,6 +87,7 @@ let bandId: string | undefined
 let isBandWide = false
 let agentsRunning = 0
 let callsRunning = 0
+let pushedAt = -Infinity
 let timers: Timer[] = []
 
 async function setActivity($: EngineInterface, role: Role) {
@@ -82,6 +100,18 @@ async function refresh($: EngineInterface) {
   await update($, now, () => clockNow)
 }
 
+// A push the engine recognized: Clawd celebrates and the Path row names where it went.
+async function celebrate($: EngineInterface, out: BuiltinToolResults['Bash']) {
+  const text = `${out.stdout}\n${out.stderr}`
+  if (/Everything up-to-date/.test(text)) return
+  // Owner and repository only: a remote URL may carry credentials.
+  const repo = text.match(/^To (\S+)/m)?.[1]?.replace(/\.git$/, '').match(/[^/:]+\/[^/:]+$/)?.[0] ?? ''
+  pushedAt = await $.clock.now()
+  await update($, push, () => ({ repo, branch: out.gitOperation?.push?.branch ?? '', at: pushedAt }))
+  await refresh($)
+  $.clock.after(CELEBRATE, () => void refresh($))
+}
+
 function animate($: EngineInterface) {
   frame += 1
   if (!bandId) return
@@ -92,17 +122,23 @@ function animate($: EngineInterface) {
 
 async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: boolean, width: number) {
   const { Box, Text } = $.ui.resolve(e)
-  const [at, a, tok, cache, calls, cnt, eff, model, usage] = await Promise.all([
+  const [at, a, tok, cache, calls, pushed, cnt, eff, cwd, model, usage] = await Promise.all([
     read($, now),
     read($, activity),
     read($, tokens),
     read($, cached),
     read($, running),
+    read($, push),
     read($, counts),
     read($, effort),
+    $.session.cwd(),
     $.session.model(),
     $.session.usage(),
   ])
+  const path = cwd.replace(/^(\/(Users|home)\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)/, '~')
+  const pushText = pushed
+    ? `  ↑ ${[pushed.branch, pushed.repo].filter(Boolean).join(' → ')} · ${fmtDur(at - pushed.at)} ago`
+    : ''
   const role = shownRole(a, at)
   const call = calls[calls.length - 1]
   const doing = call ? `⏵ ${call.tool.replace(/^mcp__.*__/, '')} · ${fmtDur(at - call.since)}` : ''
@@ -174,7 +210,8 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
           </Box>
           <Text wrap="truncate-end">
             <Text bold>{model}</Text>
-            <Text dimColor>{effortText}</Text>
+            <Text dimColor>{`${effortText}  ${path}`}</Text>
+            <Text color="success">{pushText}</Text>
           </Text>
           <Text dimColor wrap="truncate-end">
             {fmtTokens(tok.input)} input · {fmtTokens(tok.output)} output{cachedText} · {cost}
@@ -242,6 +279,13 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
             {clip(session, textCols)}
           </Text>
         </Box>
+        <Box flexDirection="row" gap={1}>
+          {label('Path')}
+          <Text wrap="truncate-end">
+            <Text bold>{tail(path, textCols)}</Text>
+            <Text color="success">{clip(pushText, textCols - [...path].length)}</Text>
+          </Text>
+        </Box>
       </Box>
     </Box>
   )
@@ -306,6 +350,13 @@ export const register: Register = on => {
     }
   }).catch(($, e, next) => next(e)) // the HUD never blocks a tool
 
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const r = await next(e)
+    if (!r.isError && r.result?.gitOperation?.push) await celebrate($, r.result)
+
+    return r
+  }).catch(($, e, next) => next(e))
+
   on('turn.complete', async ($, e, next) => {
     const u = e.usage
     if (u) {
@@ -347,8 +398,8 @@ export const register: Register = on => {
       return next(e)
     }
     bandId = e.requestId
-    // 7 text rows plus the round border.
-    isBandWide = e.props.bodyColumns >= 90 && e.props.maxRows >= BIG.rows + 3
+    // 8 text rows plus the round border.
+    isBandWide = e.props.bodyColumns >= 90 && e.props.maxRows >= BIG.rows + 4
 
     return draw($, e, isBandWide, e.props.bodyColumns)
   })

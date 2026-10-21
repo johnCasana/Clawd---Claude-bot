@@ -6,6 +6,7 @@ export type Role =
   | 'explorer'
   | 'director'
   | 'thinker'
+  | 'shipper'
   | 'idle'
   | 'sleep'
 
@@ -14,6 +15,7 @@ export type Tokens = { input: number; output: number }
 export type Counts = { edits: number; commands: number; tools: number }
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | number
 export type Call = { id: string; tool: string; since: number }
+export type Push = { repo: string; branch: string; at: number }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -23,6 +25,7 @@ declare module 'claude-code' {
       tokens: Tokens
       cached: number
       running: Call[]
+      push: Push | null
       counts: Counts
       effort: Effort | null
       warned: string[]

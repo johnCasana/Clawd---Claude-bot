@@ -11,6 +11,7 @@ A mod for [Claude Code](https://claude.com/claude-code) that shows your usage KP
 │            Tokens   1.2M input · 84k output · 1.3M total · 72% cached                              │
 │            Cost     $3.42 · $1.20/h                                                                │
 │            Session  1h23m · 12 edits · 30 commands · 85 tools                                      │
+│            Path     ~/Clawd---Claude-bot  ↑ main → johnCasana/Clawd---Claude-bot · 2m ago          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -43,6 +44,7 @@ In the desktop app: click **+** next to the prompt → **Plugins** → **Add mar
 | **Tokens** | Session input, output and total tokens, and the share of input served from the prompt cache. |
 | **Cost** | Session cost and cost per hour. |
 | **Session** | Duration, edits, commands and tools used. |
+| **Path** | The directory Claude works in and, after a `git push`, the branch and the repository it went to (`owner/repo` only, never the remote URL). |
 
 The gauges go from green to red. The white `▏` mark shows where you *should* be given the time elapsed in the window: if the bar passes the mark, at that pace you run out of quota before the reset.
 
@@ -61,13 +63,14 @@ The role is not written out: you see it in Clawd's animation and in the card's b
 | `WebSearch`, `WebFetch`, MCP tools | 🌐 Explorer | Antenna sending signals |
 | `Agent` (subagents) | 📣 Director | Megaphone and a marching mini Clawd |
 | Thinking, no tools | 💭 Thinker | Cloud where the idea takes shape |
+| Successful `git push` (8 s) | 🚀 Shipper | Hops with arms up, an arrow flies up, confetti |
 | Turn finished | ✨ Ready | Blinks and waves |
 | More than 60 s idle | 💤 Sleeping | Zzz |
 
 ## Usage
 
 - `/hud` hides or shows the HUD.
-- At 90 columns or more (and enough free height) you see the full card with the big Clawd; in narrow terminals it switches to a compact 3-line version (gauges, model, tokens and session).
+- At 90 columns or more (and enough free height) you see the full card with the big Clawd; in narrow terminals it switches to a compact 3-line version (gauges, model and path, tokens and session).
 - Effort appears after the first request to the model and updates on each one; a model without effort shows only its name.
 
 ## Requirements and limits

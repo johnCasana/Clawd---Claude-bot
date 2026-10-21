@@ -35,6 +35,8 @@ const BASE = [
   '.....o.o....o.o.....',
 ].map(row => row.padEnd(24, '.'))
 const STRIDE = '....o...o..o...o....'.padEnd(24, '.')
+// Confetti spots (column, row) clear of the body, the raised arms and the arrow's column.
+const CONFETTI = [[0, 0], [19, 1], [1, 3], [23, 4], [0, 5], [18, 0], [23, 0], [19, 4]] as const
 
 const MINI_ART = [' ▐▛███▜▌ ', '▝▜█████▛▘', '  ▘▘ ▝▝  ']
 const MINI_STRIDE = '  ▝▘ ▝▘  '
@@ -117,6 +119,16 @@ export function bigFrame(role: Role, frame: number, isAlarm: boolean): string {
       if (phase === 3) glyph(17, 0, '!', 'p', 'w')
       else for (let i = 0; i <= phase; i++) glyph(16 + i, 0, '.', 'k', 'w')
       break
+    case 'shipper': { // pushed: hops with both arms up while an arrow flies up and confetti falls
+      px(2, 7, '.'), px(3, 7, '.'), px(16, 7, '.'), px(17, 7, '.')
+      px(3, 6, 'o'), px(2, 5, 'o'), px(2, 4, 'o'), px(16, 6, 'o'), px(17, 5, 'o'), px(17, 4, 'o')
+      if (phase === 1 || phase === 2) grid.push(...grid.splice(0, 2))
+      const y = 5 - (frame % 6)
+      glyph(21, y, '▲', 'e')
+      if (y < 5) glyph(21, y + 1, '│', 'g')
+      CONFETTI.forEach(([col, row], i) => (i + frame) % 3 === 0 && glyph(col, row, '*+·'[i % 3] ?? '*', 'ywcp'[i % 4] ?? 'y'))
+      break
+    }
     case 'sleep': {
       px(6, 6, 'o'), px(13, 6, 'o')
       const slow = (frame >> 2) % 4
@@ -146,6 +158,7 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   const eyes = rows[0]
   if (eyes && (role === 'sleep' || frame % 12 === 0)) (eyes[2] = '█'), (eyes[6] = '█')
   if (isBusy(role) && frame % 2) rows[2] = [...MINI_STRIDE]
+  if (eyes && role === 'shipper') (eyes[0] = frame % 2 ? '*' : ' '), (eyes[8] = frame % 2 ? ' ' : '*')
   const fg = isAlarm ? COLORS.r! : COLORS.o!
   const words = new Uint32Array(MINI.columns * MINI.rows * 3)
   rows.forEach((row, r) =>

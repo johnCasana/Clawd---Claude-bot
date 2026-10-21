@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, ToolCallResult } from 'claude-code'
 
 import { FIVE_HOURS, elapsedPct, fmtDur } from '../hooks/format'
 import { bigFrame } from '../hooks/sprites'
@@ -24,21 +24,19 @@ const BAND = {
 const NARROW = { ...BAND, props: { ...BAND.props, bodyColumns: 80 } } as const
 
 // Nothing sits beneath the plugin: each hook here stands for the engine.
-function engine(on: On, whileCalling = async () => {}) {
+function engine(on: On, whileCalling = async (): Promise<ToolCallResult | void> => {}) {
   mock.clock(on, { now: NOW })
   on('command.register', () => ({ value: { command: 'hud' } }))
   on('ui.close', () => ({ value: undefined }))
   on('ui.blit', () => ({ value: {} }))
   on('session.usage', () => ({ value: USAGE }))
   on('session.model', () => ({ value: 'Opus 5.5' }))
+  on('session.cwd', () => ({ value: '/Users/neo/Clawd---Claude-bot' }))
   on('turn.step', async function* (_, e) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('tool.call', async () => {
-    await whileCalling()
-    return { result: {} }
-  })
+  on('tool.call', async () => (await whileCalling()) ?? { result: {} })
 }
 
 test('elapsedPct places the marker', () => {
@@ -119,6 +117,21 @@ test('a running call captions Clawd and the border takes its role color', async 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /⏵/ })).toBeUndefined()
   expect((await ui.find({ key: 'card' }))?.props.borderColor).toBe('bashBorder')
+  await ui.unmount()
+})
+
+test('a successful push makes Clawd celebrate and names the repository, never the URL', async ($, on) => {
+  const stderr = 'To https://user:secret@github.com/johnCasana/Clawd---Claude-bot.git\n   357cb67..b661cca  main -> main\n'
+  engine(on, async () => ({ result: { stdout: '', stderr, interrupted: false, gitOperation: { push: { branch: 'main' } } } }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ key: 'clawd' }))?.props.cells).toBe(bigFrame('shipper', 0, false))
+  expect((await ui.find({ key: 'card' }))?.props.borderColor).toBe('success')
+  expect(await ui.find({ type: 'Text', text: /^~\/Clawd---Claude-bot$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /↑ main → johnCasana\/Clawd---Claude-bot · 0s ago/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /secret|https/ })).toBeUndefined()
   await ui.unmount()
 })
 
