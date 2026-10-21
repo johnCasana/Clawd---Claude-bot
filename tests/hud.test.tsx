@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { FIVE_HOURS, WEEK, fmtDur, windowInfo } from '../hooks/format'
+import { FIVE_HOURS, elapsedPct, fmtDur } from '../hooks/format'
 import { bigFrame } from '../hooks/sprites'
 
 const HOUR = 3_600_000
@@ -30,20 +30,17 @@ function engine(on: On) {
   on('ui.close', () => ({ value: undefined }))
   on('ui.blit', () => ({ value: {} }))
   on('session.usage', () => ({ value: USAGE }))
+  on('session.model', () => ({ value: 'Opus 5.5' }))
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('tool.call', () => ({ result: {} }))
 }
 
-test('windowInfo projects the window and places the marker', () => {
-  // 3h into the 5h window at 75%: 25%/h, so 100% one hour from now, before the reset.
-  const hot = windowInfo(75, NOW + 2 * HOUR, NOW, FIVE_HOURS)
-  expect(Math.round(hot.perHour ?? 0)).toBe(25)
-  expect(Math.round(hot.eta ?? 0)).toBe(NOW + HOUR)
-  expect(Math.round(hot.elapsedPct)).toBe(60)
-  // 3h in at 45%: 15%/h lasts until the reset.
-  expect(windowInfo(45, NOW + 2 * HOUR, NOW, FIVE_HOURS).eta).toBeUndefined()
-  // 7d at 20% with 4 days left: 80% over 4 days is 20% a day.
-  expect(Math.round(windowInfo(20, NOW + 96 * HOUR, NOW, WEEK).perDayLeft ?? 0)).toBe(20)
+test('elapsedPct places the marker', () => {
+  // 3h into the 5h window: an even pace would sit at 60%.
+  expect(Math.round(elapsedPct(NOW + 2 * HOUR, NOW, FIVE_HOURS))).toBe(60)
   expect(fmtDur(2 * HOUR + 14 * 60_000)).toBe('2h14m')
   expect(fmtDur(76 * HOUR)).toBe('3d 4h')
 })
@@ -57,9 +54,10 @@ test('an Edit makes Clawd the engineer, above the prompt beside every KPI', asyn
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.find({ key: 'clawd' }))?.props.cells).toBe(bigFrame('engineer', 0, false))
   expect(await ui.find({ type: 'Text', text: /app\.tsx/ })).toBeUndefined()
-  for (const kpi of [/58%/, /42% libre/, /Holgado|Acelerado/, /Contexto/, /112k libres/, /Tokens/, /\$3\.42/, /1 ediciones/]) {
+  for (const kpi of [/58%/, /42% libre/, /Contexto/, /112k libres/, /Tokens/, /\$3\.42/, /1 ediciones/]) {
     expect(await ui.find({ type: 'Text', text: kpi })).toBeDefined()
   }
+  expect(await ui.find({ type: 'Text', text: /Holgado|Acelerado|%\/h|%\/día/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -74,6 +72,28 @@ test('a review skill makes Clawd the auditor; the narrow band shows the KPIs on 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...NARROW, surface })
     expect(await ui.find({ type: 'Text', text: /Contexto/ })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('the model row shows the model and the effort of the last main-loop request', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Opus 5\.5/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /esfuerzo/ })).toBeUndefined()
+  await ui.unmount()
+
+  // A subagent's request does not change what the main loop runs at.
+  for (const step of [
+    { turnId: 't', index: 0, model: 'claude-opus-5-5', effort: 'xhigh', messageCount: 1 },
+    { turnId: 'a', index: 0, model: 'claude-haiku-5-5', effort: 'low', messageCount: 1, agentId: 'x' },
+  ] as const) {
+    for await (const _ of $.turn.step(step));
+  }
+  for (const band of [BAND, NARROW]) {
+    const ui = await $.ui.mount({ ...band, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /esfuerzo muy alto/ })).toBeDefined()
     await ui.unmount()
   }
 })

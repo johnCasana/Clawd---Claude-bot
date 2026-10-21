@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderInput, SessionRateLimit, Timer } from 'claude-code'
 
 import type { Activity, Role } from '../types'
-import { FIVE_HOURS, WEEK, fmtDur, fmtTokens, fmtWhen, tone, windowInfo } from './format'
+import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtEffort, fmtTokens, fmtWhen, tone } from './format'
 import { BIG, MINI, bigFrame, gaugeCells, miniFrame } from './sprites'
 
 const SLEEP_AFTER = 60_000
@@ -13,10 +13,9 @@ const now = atom({ plugin: 'clawd-hud', key: 'now' } as const, 0)
 const activity = atom({ plugin: 'clawd-hud', key: 'activity' } as const, { role: 'idle', since: 0 })
 const tokens = atom({ plugin: 'clawd-hud', key: 'tokens' } as const, { input: 0, output: 0 })
 const counts = atom({ plugin: 'clawd-hud', key: 'counts' } as const, { edits: 0, commands: 0, tools: 0 })
+const effort = atom({ plugin: 'clawd-hud', key: 'effort' } as const, null)
 const warned = atom({ plugin: 'clawd-hud', key: 'warned' } as const, [])
 const isHidden = atom({ plugin: 'clawd-hud', key: 'isHidden' } as const, false)
-
-type Status = { text: string; color: string }
 
 const windowName = (kind: string) => (kind === 'five_hour' ? '5h' : kind === 'seven_day' ? '7d' : kind)
 const isHot = (limits: readonly SessionRateLimit[]) => limits.some(r => r.percentUsed >= 90)
@@ -77,48 +76,28 @@ function animate($: EngineInterface) {
 
 async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: boolean, width: number) {
   const { Box, Text } = $.ui.resolve(e)
-  const [at, a, tok, cnt, usage] = await Promise.all([
+  const [at, a, tok, cnt, eff, model, usage] = await Promise.all([
     read($, now),
     read($, activity),
     read($, tokens),
     read($, counts),
+    read($, effort),
+    $.session.model(),
     $.session.usage(),
   ])
+  const effortText = eff === null ? '' : ` · esfuerzo ${fmtEffort(eff)}`
   const role = shownRole(a, at)
   const five = usage.rateLimits.find(r => r.kind === 'five_hour')
   const seven = usage.rateLimits.find(r => r.kind === 'seven_day')
-  const info = (r: SessionRateLimit | undefined, span: number) =>
-    r?.resetsAt ? windowInfo(r.percentUsed, Date.parse(r.resetsAt), at, span) : undefined
-  const i5 = info(five, FIVE_HOURS)
-  const i7 = info(seven, WEEK)
+  const mark = (r: SessionRateLimit | undefined, span: number) =>
+    r?.resetsAt ? elapsedPct(Date.parse(r.resetsAt), at, span) : undefined
+  const m5 = mark(five, FIVE_HOURS)
+  const m7 = mark(seven, WEEK)
   const ctx = usage.context
   const hours = (at - usage.startedAt) / 3_600_000
   const cost = usage.cost ? `$${usage.cost.usd.toFixed(2)}` : '—'
   const costRate = usage.cost && hours >= 0.1 ? ` · $${(usage.cost.usd / hours).toFixed(2)}/h` : ''
   const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} ediciones · ${cnt.commands} comandos · ${cnt.tools} tools`
-  const noLimits = { text: 'Sin datos: requiere plan Pro/Max y una primera respuesta', color: 'subtle' }
-  const reached = (r: SessionRateLimit) => ({
-    text: `✗ Límite alcanzado · vuelve ${r.resetsAt ? fmtWhen(Date.parse(r.resetsAt), at) : 'pronto'}`,
-    color: 'error',
-  })
-  const s5: Status = !five
-    ? noLimits
-    : five.percentUsed >= 100
-      ? reached(five)
-      : i5?.eta
-        ? { text: `⚠ Acelerado: se agota ${fmtWhen(i5.eta, at)}`, color: 'warning' }
-        : i5?.perHour !== undefined
-          ? { text: `✓ Holgado: ${i5.perHour.toFixed(0)}%/h llega a la recarga`, color: 'success' }
-          : { text: 'Calculando ritmo…', color: 'subtle' }
-  const s7: Status = !seven
-    ? noLimits
-    : seven.percentUsed >= 100
-      ? reached(seven)
-      : i7?.eta
-        ? { text: `⚠ Se agota ${fmtWhen(i7.eta, at)}`, color: 'warning' }
-        : i7?.perDayLeft !== undefined
-          ? { text: `✓ ~${i7.perDayLeft.toFixed(0)}%/día disponible`, color: 'success' }
-          : { text: 'Calculando ritmo…', color: 'subtle' }
   const pctText = (pct?: number) => (
     <Text bold color={pct === undefined ? 'subtle' : tone(pct)}>
       {pct === undefined ? '  —' : `${Math.round(pct)}%`.padStart(4)}
@@ -163,12 +142,13 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
         {art}
         <Box flexDirection="column" flexShrink={1}>
           <Box flexDirection="row" columnGap={3} flexWrap="wrap">
-            {chip('5h', 'b5', five?.percentUsed, i5?.elapsedPct, five?.resetsAt)}
-            {chip('7d', 'b7', seven?.percentUsed, i7?.elapsedPct, seven?.resetsAt)}
+            {chip('5h', 'b5', five?.percentUsed, m5, five?.resetsAt)}
+            {chip('7d', 'b7', seven?.percentUsed, m7, seven?.resetsAt)}
             {chip('Contexto', 'bc', ctx.percent)}
           </Box>
-          <Text color={s5.color} wrap="truncate-end">
-            {s5.text}
+          <Text wrap="truncate-end">
+            <Text bold>{model}</Text>
+            <Text dimColor>{effortText}</Text>
           </Text>
           <Text dimColor wrap="truncate-end">
             {fmtTokens(tok.input)} entrada · {fmtTokens(tok.output)} salida · {cost}
@@ -183,22 +163,16 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const textCols = width - 4 - BIG.columns - 2 - 9 - 1
   const barCols = Math.max(12, Math.min(22, Math.floor(textCols * 0.25)))
   const label = (text: string) => <Text bold>{text.padEnd(8)}</Text>
-  const meter = (name: string, key: string, pct: number | undefined, mark: number | undefined, detail: string, status?: Status) => {
-    const room = textCols - barCols - 1 - 4
-    const shown = clip(`  ${detail}`, room)
-    const rest = room - [...shown].length
-    return (
-      <Box flexDirection="row" gap={1}>
-        {label(name)}
-        {gauge(key, pct, barCols, mark)}
-        <Text wrap="truncate-end">
-          {pctText(pct)}
-          <Text dimColor>{shown}</Text>
-          {status && rest > 4 ? <Text color={status.color}>{clip(`  ${status.text}`, rest)}</Text> : undefined}
-        </Text>
-      </Box>
-    )
-  }
+  const meter = (name: string, key: string, pct: number | undefined, mark: number | undefined, detail: string) => (
+    <Box flexDirection="row" gap={1}>
+      {label(name)}
+      {gauge(key, pct, barCols, mark)}
+      <Text wrap="truncate-end">
+        {pctText(pct)}
+        <Text dimColor>{clip(`  ${detail}`, textCols - barCols - 1 - 4)}</Text>
+      </Text>
+    </Box>
+  )
   const reset = (r?: SessionRateLimit) =>
     r?.resetsAt
       ? `${Math.max(0, Math.round(100 - r.percentUsed))}% libre · ↻ ${fmtWhen(Date.parse(r.resetsAt), at)} (${fmtDur(Date.parse(r.resetsAt) - at)})`
@@ -212,9 +186,16 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
     <Box flexDirection="row" gap={2} borderStyle="round" borderColor="claude" paddingX={1}>
       {art}
       <Box flexDirection="column" flexShrink={1}>
-        {meter('5h', 'g5', five?.percentUsed, i5?.elapsedPct, reset(five), s5)}
-        {meter('7d', 'g7', seven?.percentUsed, i7?.elapsedPct, reset(seven), s7)}
+        {meter('5h', 'g5', five?.percentUsed, m5, reset(five))}
+        {meter('7d', 'g7', seven?.percentUsed, m7, reset(seven))}
         {meter('Contexto', 'gc', ctx.percent, undefined, ctxDetail)}
+        <Box flexDirection="row" gap={1}>
+          {label('Modelo')}
+          <Text wrap="truncate-end">
+            <Text bold>{clip(model, textCols)}</Text>
+            <Text dimColor>{clip(effortText, textCols - [...model].length)}</Text>
+          </Text>
+        </Box>
         <Box flexDirection="row" gap={1}>
           {label('Tokens')}
           <Text wrap="truncate-end">
@@ -298,6 +279,13 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // Effort has no session getter: each main-loop request carries the one in force.
+  on('turn.step', async function* ($, e, next) {
+    if (!e.agentId) await update($, effort, () => e.effort ?? null)
+
+    return yield* next(e)
+  })
+
   on('session.measure', async ($, e, next) => {
     isAlarm = isHot(e.rateLimits)
     const seen = await read($, warned)
@@ -318,7 +306,8 @@ export const register: Register = on => {
       return next(e)
     }
     bandId = e.requestId
-    isBandWide = e.props.bodyColumns >= 90 && e.props.maxRows >= BIG.rows + 2
+    // 7 text rows plus the round border.
+    isBandWide = e.props.bodyColumns >= 90 && e.props.maxRows >= BIG.rows + 3
 
     return draw($, e, isBandWide, e.props.bodyColumns)
   })

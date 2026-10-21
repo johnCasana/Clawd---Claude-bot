@@ -29,19 +29,11 @@ export function fmtTokens(n: number): string {
   return `${(n / 1e6).toFixed(1)}M`
 }
 
+const EFFORTS: Record<string, string> = { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'muy alto', max: 'máximo' }
+export const fmtEffort = (effort: string | number) => EFFORTS[effort] ?? String(effort)
+
 export const tone = (pct: number) => (pct >= 85 ? 'error' : pct >= 60 ? 'warning' : 'success')
 
-// shortcut: average rate since the window opened (resetsAt - span), not a sliding recent rate; keep samples if it reads too smooth.
-export function windowInfo(pct: number, resetsAt: number, now: number, span: number) {
-  const elapsed = Math.min(span, Math.max(0, now - (resetsAt - span)))
-  const left = Math.max(0, resetsAt - now)
-  const perMs = pct > 0 && elapsed >= 10 * MINUTE ? pct / elapsed : undefined
-  const eta = perMs && pct < 100 ? now + (100 - pct) / perMs : undefined
-  return {
-    // Where usage would sit now if spread evenly to the reset: the gauge's marker.
-    elapsedPct: (elapsed / span) * 100,
-    perHour: perMs === undefined ? undefined : perMs * HOUR,
-    eta: eta !== undefined && eta < resetsAt ? eta : undefined,
-    perDayLeft: left >= HOUR ? ((100 - pct) / left) * DAY : undefined,
-  }
-}
+// Where usage would sit now if spread evenly to the reset: the gauge's marker.
+export const elapsedPct = (resetsAt: number, now: number, span: number) =>
+  (Math.min(span, Math.max(0, now - (resetsAt - span))) / span) * 100
