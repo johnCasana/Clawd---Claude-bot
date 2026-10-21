@@ -49,7 +49,8 @@ const toBase64 = (words: Uint32Array) => (new Uint8Array(words.buffer) as Uint8A
 
 type Glyph = { col: number; row: number; ch: string; fg: number; bg?: number }
 
-const isBusy = (role: Role) => role !== 'idle' && role !== 'sleep'
+// Standing roles keep their legs still: waiting on the person, startled by an Esc, or resting.
+const isBusy = (role: Role) => !['idle', 'sleep', 'waiting', 'startled'].includes(role)
 
 export function bigFrame(role: Role, frame: number, isAlarm: boolean): string {
   const grid = BASE.map(row => row.split(''))
@@ -129,6 +130,23 @@ export function bigFrame(role: Role, frame: number, isAlarm: boolean): string {
       CONFETTI.forEach(([col, row], i) => (i + frame) % 3 === 0 && glyph(col, row, '*+·'[i % 3] ?? '*', 'ywcp'[i % 4] ?? 'y'))
       break
     }
+    case 'waiting': { // a permission dialog is up: one hand raised and waving, a blinking question mark
+      px(16, 7, '.'), px(17, 7, '.'), px(16, 6, 'o'), px(17, 5, 'o'), px(17, 4, 'o')
+      px(frame % 2 ? 18 : 17, 3, 'o')
+      if (phase < 2) glyph(20, 1, '?', 'y')
+      break
+    }
+    case 'compactor': { // compacting the context: two arrows close in and squeeze it two pixels flat
+      const isSqueezed = phase === 1 || phase === 2
+      if (isSqueezed) grid.splice(8, 2), grid.unshift([...BASE[0]!], [...BASE[0]!])
+      glyph(isSqueezed ? 1 : 0, 3, '▶', 'c'), glyph(isSqueezed ? 18 : 19, 3, '◀', 'c')
+      break
+    }
+    case 'startled': // interrupted: eyes wide open, an exclamation mark jumps over the head
+      px(5, 6, 'w'), px(5, 7, 'w'), px(7, 6, 'w'), px(7, 7, 'w')
+      px(12, 6, 'w'), px(12, 7, 'w'), px(14, 6, 'w'), px(14, 7, 'w')
+      glyph(10, phase < 2 ? 0 : 1, '!', 'p')
+      break
     case 'sleep': {
       px(6, 6, 'o'), px(13, 6, 'o')
       const slow = (frame >> 2) % 4
@@ -159,6 +177,8 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   if (eyes && (role === 'sleep' || frame % 12 === 0)) (eyes[2] = '█'), (eyes[6] = '█')
   if (isBusy(role) && frame % 2) rows[2] = [...MINI_STRIDE]
   if (eyes && role === 'shipper') (eyes[0] = frame % 2 ? '*' : ' '), (eyes[8] = frame % 2 ? ' ' : '*')
+  if (eyes && (role === 'waiting' || role === 'startled') && frame % 2) eyes[8] = role === 'waiting' ? '?' : '!'
+  if (eyes && role === 'compactor') (eyes[0] = '▸'), (eyes[8] = '◂')
   const fg = isAlarm ? COLORS.r! : COLORS.o!
   const words = new Uint32Array(MINI.columns * MINI.rows * 3)
   rows.forEach((row, r) =>
@@ -167,19 +187,24 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   return toBase64(words)
 }
 
-// A background task's 3-cell icon: a mini Clawd waving for a subagent, a shell's spinner, a monitor's waves, else a turning disc.
+// A background task's icon: a mini Clawd at work, then its tool: a subagent's marching trail, a shell's spinner,
+// a monitor's waves, else a turning disc. The Clawd waves for a subagent and types (arms in turn) for the rest.
+export const TASK_ICON_COLS = 5
 const SPIN = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏']
 export function taskIcon(kind: string, frame: number): string {
-  const [text, fg] =
+  const step = (frame >> 1) % 2
+  const clawd = kind === 'subagent' ? (step ? '▝█▘' : '▗█▖') : step ? '▗█▘' : '▝█▖'
+  const [prop, fg] =
     kind === 'subagent'
-      ? [(frame >> 1) % 2 ? '▝█▘' : '▗█▖', COLORS.o!]
+      ? [['  ', '› ', '»›'][(frame >> 1) % 3] ?? '  ', COLORS.o!]
       : kind === 'shell'
-        ? [`$ ${SPIN[frame % SPIN.length]}`, COLORS.e!]
+        ? [`$${SPIN[frame % SPIN.length]}`, COLORS.e!]
         : kind === 'monitor'
-          ? [['◉  ', '◉) ', '◉))'][(frame >> 1) % 3] ?? '◉  ', COLORS.c!]
-          : [['◐', '◓', '◑', '◒'][frame % 4] ?? '◐', COLORS.y!]
-  const words = new Uint32Array(9)
-  ;[...text.padEnd(3)].slice(0, 3).forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, fg, NONE], c * 3))
+          ? [['◉ ', '◉)'][step] ?? '◉ ', COLORS.c!]
+          : [`${['◐', '◓', '◑', '◒'][frame % 4] ?? '◐'} `, COLORS.y!]
+  const words = new Uint32Array(TASK_ICON_COLS * 3)
+  ;[...clawd].forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, COLORS.o!, NONE], c * 3))
+  ;[...prop.padEnd(2)].slice(0, 2).forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, fg, NONE], (c + 3) * 3))
   return toBase64(words)
 }
 

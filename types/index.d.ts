@@ -7,6 +7,9 @@ export type Role =
   | 'director'
   | 'thinker'
   | 'shipper'
+  | 'waiting'
+  | 'compactor'
+  | 'startled'
   | 'idle'
   | 'sleep'
 

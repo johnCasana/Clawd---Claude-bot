@@ -11,10 +11,16 @@ import type {
 
 import type { Activity, Role, Task } from '../types'
 import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
-import { BIG, MINI, bigFrame, gaugeCells, miniFrame, taskIcon } from './sprites'
+import { BIG, MINI, TASK_ICON_COLS, bigFrame, gaugeCells, miniFrame, taskIcon } from './sprites'
 
 const SLEEP_AFTER = 60_000
 const CELEBRATE = 8_000
+const STARTLE = 3_000
+const CONTEXT_WARN = 80
+const DONE_SOUND = 'sounds/done.wav'
+// A shorter turn is one the person watched end: no chime.
+const CHIME_AFTER = 10_000
+const TASK_ENDED = /^(completed|failed|killed)$/
 // The background column's width, shown from BG_MIN_WIDTH columns; below, the session row counts the tasks.
 const BG_COLS = 34
 const BG_MIN_WIDTH = 150
@@ -30,6 +36,9 @@ const ROLE_COLORS: Record<Role, ThemeKey> = {
   director: 'permission',
   thinker: 'remember',
   shipper: 'success',
+  waiting: 'warning',
+  compactor: 'suggestion',
+  startled: 'error',
   idle: 'claude',
   sleep: 'subtle',
 }
@@ -56,13 +65,12 @@ function tail(text: string, n: number) {
   const chars = [...text]
   return chars.length <= n ? text : '…' + chars.slice(chars.length - n + 1).join('')
 }
-// Clawd stays awake while background work runs.
-const shownRole = (a: Activity, at: number): Role =>
-  at - pushedAt < CELEBRATE
-    ? 'shipper'
-    : a.role === 'idle' && at - a.since > SLEEP_AFTER && taskCount === 0
-      ? 'sleep'
-      : a.role
+// Clawd stays awake while background work runs; a startle wears off into idle.
+function shownRole(a: Activity, at: number): Role {
+  if (at - pushedAt < CELEBRATE) return 'shipper'
+  const role = a.role === 'startled' && at - a.since >= STARTLE ? 'idle' : a.role
+  return role === 'idle' && at - a.since > SLEEP_AFTER && taskCount === 0 ? 'sleep' : role
+}
 
 function classify(e: Record<string, unknown>): Role {
   const tool = String(e.tool)
@@ -98,6 +106,9 @@ let agentsRunning = 0
 let callsRunning = 0
 let pushedAt = -Infinity
 let taskCount = 0
+let isContextWarned = false
+// The call held at a permission dialog and the role Clawd goes back to once it ends.
+let asked: { id: string; from: Role } | undefined
 // The kinds of the task rows drawn with an icon, in order: the animation blits `bg-<i>`.
 let bgKinds: string[] = []
 let timers: Timer[] = []
@@ -114,6 +125,14 @@ async function refresh($: EngineInterface) {
 
 async function setTasks($: EngineInterface, fn: (t: Task[]) => Task[]) {
   taskCount = (await update($, tasks, fn)).length
+}
+
+// The ask on this call was answered: the hand goes down, back to the role it interrupted.
+async function lowerHand($: EngineInterface, id: string) {
+  if (asked?.id !== id) return
+  const { from } = asked
+  asked = undefined
+  if (act.role === 'waiting') await setActivity($, from)
 }
 
 async function addTask($: EngineInterface, task: Omit<Task, 'since'>) {
@@ -253,7 +272,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const taskMark = (kind: string, i: number) => {
     if (e.surface !== 'terminal') return <Text color="claude">•</Text>
     const { Raster } = $.ui.resolve(e)
-    return <Raster key={`bg-${i}`} columns={3} rows={1} cells={taskIcon(kind, frame)} />
+    return <Raster key={`bg-${i}`} columns={TASK_ICON_COLS} rows={1} cells={taskIcon(kind, frame)} />
   }
 
   // Beside the mascot, inside the round border and its padding, after the label column.
@@ -279,8 +298,11 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
       ? `${fmtTokens(ctx.window)} window`
       : `${fmtTokens(ctx.tokens)} / ${fmtTokens(ctx.window)} · ${fmtTokens(Math.max(0, ctx.window - ctx.tokens))} left`
 
+  // Waiting on the person, the border blinks with the 1 s tick.
+  const border = role === 'waiting' && Math.floor(at / 1000) % 2 ? 'subtle' : ROLE_COLORS[role]
+
   return (
-    <Box key="card" flexDirection="row" gap={2} borderStyle="round" borderColor={ROLE_COLORS[role]} paddingX={1}>
+    <Box key="card" flexDirection="row" gap={2} borderStyle="round" borderColor={border} paddingX={1}>
       {art}
       <Box flexDirection="column" flexShrink={1}>
         {meter('5h', 'g5', five?.percentUsed, m5, reset(five))}
@@ -332,7 +354,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
               <Box key={t.id} flexDirection="row" gap={1}>
                 {taskMark(t.kind, i)}
                 <Text wrap="truncate-end">
-                  {clip(t.label, BG_COLS - 4 - dur.length - 1)}
+                  {clip(t.label, BG_COLS - TASK_ICON_COLS - 1 - dur.length - 1)}
                   <Text dimColor> {dur}</Text>
                 </Text>
               </Box>
@@ -398,12 +420,56 @@ export const register: Register = on => {
       return await next(e)
     } finally {
       if (e.tool === 'Agent') agentsRunning -= 1
+      await lowerHand($, e.tool_use_id)
       if (call) {
         callsRunning -= 1
         await update($, running, r => r.filter(c => c.id !== call.id))
       }
     }
   }).catch(($, e, next) => next(e)) // the HUD never blocks a tool
+
+  // An ask puts the call to the person: Clawd raises a hand. A failing hook leaves the verdict beneath, so no catch.
+  // No event marks the answer: the hand goes down when the call ends or shows the run-in-background pill.
+  on('tool.check', async ($, e, next) => {
+    const r = await next(e)
+    if (r.decision === 'ask' && e.tool_use_id && !asked) {
+      asked = { id: e.tool_use_id, from: act.role }
+      await setActivity($, 'waiting')
+    }
+
+    return r
+  })
+
+  // Drawing is pure: these two rows only read, and leave their write to a timer that runs after the draw.
+  // The pill shows only under a call that runs, so an ask on it was allowed.
+  on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
+    const id = e.props.tool_use_id
+    if (asked?.id === id) $.clock.after(0, () => void lowerHand($, id))
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // A task's end arrives as its notification row, in real time; the list at Stop stays the record when it fires.
+  on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
+    const { id, status } = e.props.task ?? {}
+    if (id && TASK_ENDED.test(status ?? '') && (await read($, tasks)).some(t => t.id === id)) {
+      $.clock.after(0, () => void setTasks($, t => t.filter(x => x.id !== id)))
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Compacting squeezes Clawd until the summary lands; a failure after next keeps the compaction, so no catch.
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId || e.trigger === 'precompute') return next(e)
+    const from = act.role
+    await setActivity($, 'compactor')
+    try {
+      return await next(e)
+    } finally {
+      await setActivity($, from)
+    }
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
@@ -450,7 +516,12 @@ export const register: Register = on => {
       }))
       await update($, cached, c => c + u.cache_read_input_tokens)
     }
-    if (!e.agentId) await setActivity($, 'idle')
+    if (!e.agentId) {
+      // An Esc startles Clawd for a moment; any other end of a long turn chimes, since the person may be away.
+      await setActivity($, e.isAborted ? 'startled' : 'idle')
+      if (e.isAborted) $.clock.after(STARTLE, () => void refresh($))
+      else if (e.durationMs >= CHIME_AFTER) void $.audio.play({ asset: DONE_SOUND }).catch(() => {})
+    }
 
     return next(e)
   })
@@ -471,6 +542,10 @@ export const register: Register = on => {
       $.ui.toast(`⚠ ${windowName(r.kind)} usage at ${r.percentUsed}%${when}`)
     }
     if (fresh.length) await update($, warned, w => [...w, ...fresh.map(r => `${r.kind}@${r.resetsAt}`)])
+    // Once per fill: a compaction that frees the window arms the warning again.
+    const ctx = e.context.percent ?? 0
+    if (ctx >= CONTEXT_WARN && !isContextWarned) $.ui.toast(`⚠ Context at ${Math.round(ctx)}% · /compact frees it`)
+    isContextWarned = ctx >= CONTEXT_WARN
     await refresh($)
 
     return next(e)
