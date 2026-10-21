@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderInput, SessionRateLimit, Timer } from 'claude-code'
 
 import type { Activity, Role } from '../types'
-import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtEffort, fmtTokens, fmtWhen, tone } from './format'
+import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
 import { BIG, MINI, bigFrame, gaugeCells, miniFrame } from './sprites'
 
 const SLEEP_AFTER = 60_000
@@ -85,7 +85,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
     $.session.model(),
     $.session.usage(),
   ])
-  const effortText = eff === null ? '' : ` · esfuerzo ${fmtEffort(eff)}`
+  const effortText = eff === null ? '' : ` · effort ${eff}`
   const role = shownRole(a, at)
   const five = usage.rateLimits.find(r => r.kind === 'five_hour')
   const seven = usage.rateLimits.find(r => r.kind === 'seven_day')
@@ -97,7 +97,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const hours = (at - usage.startedAt) / 3_600_000
   const cost = usage.cost ? `$${usage.cost.usd.toFixed(2)}` : '—'
   const costRate = usage.cost && hours >= 0.1 ? ` · $${(usage.cost.usd / hours).toFixed(2)}/h` : ''
-  const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} ediciones · ${cnt.commands} comandos · ${cnt.tools} tools`
+  const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} edits · ${cnt.commands} commands · ${cnt.tools} tools`
   const pctText = (pct?: number) => (
     <Text bold color={pct === undefined ? 'subtle' : tone(pct)}>
       {pct === undefined ? '  —' : `${Math.round(pct)}%`.padStart(4)}
@@ -144,14 +144,14 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
           <Box flexDirection="row" columnGap={3} flexWrap="wrap">
             {chip('5h', 'b5', five?.percentUsed, m5, five?.resetsAt)}
             {chip('7d', 'b7', seven?.percentUsed, m7, seven?.resetsAt)}
-            {chip('Contexto', 'bc', ctx.percent)}
+            {chip('Context', 'bc', ctx.percent)}
           </Box>
           <Text wrap="truncate-end">
             <Text bold>{model}</Text>
             <Text dimColor>{effortText}</Text>
           </Text>
           <Text dimColor wrap="truncate-end">
-            {fmtTokens(tok.input)} entrada · {fmtTokens(tok.output)} salida · {cost}
+            {fmtTokens(tok.input)} input · {fmtTokens(tok.output)} output · {cost}
             {costRate} · {session}
           </Text>
         </Box>
@@ -175,12 +175,12 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   )
   const reset = (r?: SessionRateLimit) =>
     r?.resetsAt
-      ? `${Math.max(0, Math.round(100 - r.percentUsed))}% libre · ↻ ${fmtWhen(Date.parse(r.resetsAt), at)} (${fmtDur(Date.parse(r.resetsAt) - at)})`
+      ? `${Math.max(0, Math.round(100 - r.percentUsed))}% left · ↻ ${fmtWhen(Date.parse(r.resetsAt), at)} (${fmtDur(Date.parse(r.resetsAt) - at)})`
       : ''
   const ctxDetail =
     ctx.tokens === undefined
-      ? `ventana de ${fmtTokens(ctx.window)}`
-      : `${fmtTokens(ctx.tokens)} / ${fmtTokens(ctx.window)} · ${fmtTokens(Math.max(0, ctx.window - ctx.tokens))} libres`
+      ? `${fmtTokens(ctx.window)} window`
+      : `${fmtTokens(ctx.tokens)} / ${fmtTokens(ctx.window)} · ${fmtTokens(Math.max(0, ctx.window - ctx.tokens))} left`
 
   return (
     <Box flexDirection="row" gap={2} borderStyle="round" borderColor="claude" paddingX={1}>
@@ -188,9 +188,9 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
       <Box flexDirection="column" flexShrink={1}>
         {meter('5h', 'g5', five?.percentUsed, m5, reset(five))}
         {meter('7d', 'g7', seven?.percentUsed, m7, reset(seven))}
-        {meter('Contexto', 'gc', ctx.percent, undefined, ctxDetail)}
+        {meter('Context', 'gc', ctx.percent, undefined, ctxDetail)}
         <Box flexDirection="row" gap={1}>
-          {label('Modelo')}
+          {label('Model')}
           <Text wrap="truncate-end">
             <Text bold>{clip(model, textCols)}</Text>
             <Text dimColor>{clip(effortText, textCols - [...model].length)}</Text>
@@ -199,19 +199,19 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
         <Box flexDirection="row" gap={1}>
           {label('Tokens')}
           <Text wrap="truncate-end">
-            <Text bold>{fmtTokens(tok.input)}</Text> entrada · <Text bold>{fmtTokens(tok.output)}</Text> salida
-            <Text dimColor>{clip(` · ${fmtTokens(tok.input + tok.output)} en total`, textCols - 30)}</Text>
+            <Text bold>{fmtTokens(tok.input)}</Text> input · <Text bold>{fmtTokens(tok.output)}</Text> output
+            <Text dimColor>{clip(` · ${fmtTokens(tok.input + tok.output)} total`, textCols - 30)}</Text>
           </Text>
         </Box>
         <Box flexDirection="row" gap={1}>
-          {label('Costo')}
+          {label('Cost')}
           <Text wrap="truncate-end">
             <Text bold>{cost}</Text>
             <Text dimColor>{costRate}</Text>
           </Text>
         </Box>
         <Box flexDirection="row" gap={1}>
-          {label('Sesión')}
+          {label('Session')}
           <Text dimColor wrap="truncate-end">
             {clip(session, textCols)}
           </Text>
@@ -223,7 +223,7 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'hud', description: 'Muestra u oculta el Clawd HUD sobre el prompt' })
+    await $.command.register({ name: 'hud', description: 'Show or hide the Clawd HUD above the prompt' })
     // Earlier versions opened a side pane; the HUD now lives above the prompt.
     void $.ui.close({ id: 'clawd-hud' })
     act = await read($, activity)
@@ -239,7 +239,7 @@ export const register: Register = on => {
   on('command.run', { command: 'hud' }, async $ => {
     const hidden = await update($, isHidden, h => !h)
 
-    return { text: hidden ? 'Clawd HUD oculto. /hud lo vuelve a mostrar.' : 'Clawd HUD visible sobre el prompt.' }
+    return { text: hidden ? 'Clawd HUD hidden. /hud shows it again.' : 'Clawd HUD shown above the prompt.' }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -291,8 +291,8 @@ export const register: Register = on => {
     const seen = await read($, warned)
     const fresh = e.rateLimits.filter(r => r.percentUsed >= 90 && !seen.includes(`${r.kind}@${r.resetsAt}`))
     for (const r of fresh) {
-      const when = r.resetsAt ? ` · recarga en ${fmtDur(Date.parse(r.resetsAt) - clockNow)}` : ''
-      $.ui.toast(`⚠ Uso ${windowName(r.kind)} al ${r.percentUsed}%${when}`)
+      const when = r.resetsAt ? ` · resets in ${fmtDur(Date.parse(r.resetsAt) - clockNow)}` : ''
+      $.ui.toast(`⚠ ${windowName(r.kind)} usage at ${r.percentUsed}%${when}`)
     }
     if (fresh.length) await update($, warned, w => [...w, ...fresh.map(r => `${r.kind}@${r.resetsAt}`)])
     await refresh($)

@@ -54,10 +54,10 @@ test('an Edit makes Clawd the engineer, above the prompt beside every KPI', asyn
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.find({ key: 'clawd' }))?.props.cells).toBe(bigFrame('engineer', 0, false))
   expect(await ui.find({ type: 'Text', text: /app\.tsx/ })).toBeUndefined()
-  for (const kpi of [/58%/, /42% libre/, /Contexto/, /112k libres/, /Tokens/, /\$3\.42/, /1 ediciones/]) {
+  for (const kpi of [/58%/, /42% left/, /Context/, /112k left/, /Tokens/, /\$3\.42/, /1 edits/]) {
     expect(await ui.find({ type: 'Text', text: kpi })).toBeDefined()
   }
-  expect(await ui.find({ type: 'Text', text: /Holgado|Acelerado|%\/h|%\/día/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /%\/h|%\/day/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -71,7 +71,7 @@ test('a review skill makes Clawd the auditor; the narrow band shows the KPIs on 
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...NARROW, surface })
-    expect(await ui.find({ type: 'Text', text: /Contexto/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Context/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -81,7 +81,7 @@ test('the model row shows the model and the effort of the last main-loop request
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /Opus 5\.5/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /esfuerzo/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /effort/ })).toBeUndefined()
   await ui.unmount()
 
   // A subagent's request does not change what the main loop runs at.
@@ -93,7 +93,7 @@ test('the model row shows the model and the effort of the last main-loop request
   }
   for (const band of [BAND, NARROW]) {
     const ui = await $.ui.mount({ ...band, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /esfuerzo muy alto/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /effort xhigh/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -102,6 +102,6 @@ test('/hud hides the band and shows it again', async ($, on) => {
   engine(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const hud = { command: 'hud', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 140 } } as const
-  expect((await $.command.run(hud))?.text).toContain('oculto')
-  expect((await $.command.run(hud))?.text).toContain('visible')
+  expect((await $.command.run(hud))?.text).toContain('hidden')
+  expect((await $.command.run(hud))?.text).toContain('shown')
 })

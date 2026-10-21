@@ -1,94 +1,94 @@
 # Clawd HUD
 
-Un mod para [Claude Code](https://claude.com/claude-code) que muestra, justo encima del prompt, tus KPIs de uso: ventanas 5h y 7d, recargas, contexto, tokens, costo y actividad. A su lado, Clawd (la mascota) animado cambia de rol según lo que hace Claude.
+A mod for [Claude Code](https://claude.com/claude-code) that shows your usage KPIs right above the prompt: 5h and 7d windows, resets, context, tokens, cost and activity. Next to them, an animated Clawd (the mascot) changes role based on what Claude is doing.
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  [Clawd    5h       ████▋░░░░░░░░░  58%  42% libre · ↻ hoy 16:45 (2h14m)                          │
-│   animado] 7d       █▊░░░░░░░░░░░░  21%  79% libre · ↻ jue 23 09:00 (3d 4h)                        │
-│            Contexto ██████░░░░░░░░  44%  88k / 200k · 112k libres                                  │
-│            Modelo   Opus 5.5 · esfuerzo alto                                                       │
-│            Tokens   1.2M entrada · 84k salida · 1.3M en total                                      │
-│            Costo    $3.42 · $1.20/h                                                                │
-│            Sesión   1h23m · 12 ediciones · 30 comandos · 85 tools                                  │
+│  [animated 5h       ████▋░░░░░░░░░  58%  42% left · ↻ today 16:45 (2h14m)                         │
+│   Clawd]   7d       █▊░░░░░░░░░░░░  21%  79% left · ↻ Thu 23 09:00 (3d 4h)                         │
+│            Context  ██████░░░░░░░░  44%  88k / 200k · 112k left                                    │
+│            Model    Opus 5.5 · effort high                                                         │
+│            Tokens   1.2M input · 84k output · 1.3M total                                           │
+│            Cost     $3.42 · $1.20/h                                                                │
+│            Session  1h23m · 12 edits · 30 commands · 85 tools                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## Instalación
+## Install
 
-En la terminal, dentro de una sesión de Claude Code:
+In the terminal, inside a Claude Code session:
 
 ```
 /plugin install clawd-hud --marketplace johnCasana/Clawd---Claude-bot
 ```
 
-Responde `y` para agregar el marketplace y elige el alcance (Enter toma el de usuario). El HUD aparece de inmediato.
+Answer `y` to add the marketplace and pick a scope (Enter takes the user scope). The HUD shows up right away.
 
-Desde una shell:
+From a shell:
 
 ```
 claude plugin install clawd-hud --marketplace johnCasana/Clawd---Claude-bot
 ```
 
-En la app de escritorio: clic en **+** junto al prompt → **Plugins** → **Add marketplace** con `johnCasana/Clawd---Claude-bot` → **Add plugin**.
+In the desktop app: click **+** next to the prompt → **Plugins** → **Add marketplace** with `johnCasana/Clawd---Claude-bot` → **Add plugin**.
 
-## Qué muestra
+## What it shows
 
-| Fila | Qué significa |
+| Row | Meaning |
 | --- | --- |
-| **5h** | Uso de la ventana de 5 horas, % libre y cuándo se recarga. |
-| **7d** | Uso semanal, % libre y fecha de recarga. |
-| **Contexto** | Ventana de contexto: tokens usados, tamaño total y tokens libres. |
-| **Modelo** | Modelo en uso (como lo muestra `/model`) y el esfuerzo del último pedido (`/effort`). |
-| **Tokens** | Tokens de entrada, salida y total de la sesión. |
-| **Costo** | Costo de la sesión y costo por hora. |
-| **Sesión** | Duración, ediciones, comandos y tools usados. |
+| **5h** | Usage of the 5-hour window, % left and when it resets. |
+| **7d** | Weekly usage, % left and reset date. |
+| **Context** | Context window: tokens used, total size and tokens left. |
+| **Model** | Model in use (as `/model` shows it) and the effort of the last request (`/effort`). |
+| **Tokens** | Session input, output and total tokens. |
+| **Cost** | Session cost and cost per hour. |
+| **Session** | Duration, edits, commands and tools used. |
 
-Los medidores van de verde a rojo. La marca blanca `▏` indica dónde *deberías* ir según el tiempo transcurrido de la ventana: si la barra pasa la marca, a ese ritmo te quedas sin cuota antes de la recarga.
+The gauges go from green to red. The white `▏` mark shows where you *should* be given the time elapsed in the window: if the bar passes the mark, at that pace you run out of quota before the reset.
 
-Al pasar el 90% en 5h o 7d, Clawd se pone rojo y suda, y aparece un aviso una sola vez por ventana.
+Past 90% in 5h or 7d, Clawd turns red and sweats, and a warning shows once per window.
 
-## Los roles de Clawd
+## Clawd's roles
 
-El rol no se escribe: se ve en la animación de Clawd.
+The role is not written out: you see it in Clawd's animation.
 
-| Actividad de Claude | Rol | Animación |
+| Claude's activity | Role | Animation |
 | --- | --- | --- |
-| `Write`, `Edit`, `NotebookEdit` | 👷 Ingeniero | Casco y martillo |
-| Revisiones (`/code-review`, agentes de review o audit) | 📝 Auditor | Lentes, hoja y lápiz marcando ✓ |
-| `Read`, `Grep`, `Glob` | 🔍 Detective | Sombrero de cuadros y lupa |
-| `Bash` | 💻 Operador | Laptop con prompt parpadeando |
-| `WebSearch`, `WebFetch`, tools MCP | 🌐 Explorador | Antena enviando señales |
-| `Agent` (subagentes) | 📣 Director | Megáfono y un mini Clawd marchando |
-| Pensando, sin tools | 💭 Pensador | Nube donde se forma la idea |
-| Turno terminado | ✨ Listo | Parpadea y saluda |
-| Más de 60 s sin actividad | 💤 Durmiendo | Zzz |
+| `Write`, `Edit`, `NotebookEdit` | 👷 Engineer | Hard hat and hammer |
+| Reviews (`/code-review`, review or audit agents) | 📝 Auditor | Glasses, sheet and pencil ticking ✓ |
+| `Read`, `Grep`, `Glob` | 🔍 Detective | Checked hat and magnifying glass |
+| `Bash` | 💻 Operator | Laptop with a blinking prompt |
+| `WebSearch`, `WebFetch`, MCP tools | 🌐 Explorer | Antenna sending signals |
+| `Agent` (subagents) | 📣 Director | Megaphone and a marching mini Clawd |
+| Thinking, no tools | 💭 Thinker | Cloud where the idea takes shape |
+| Turn finished | ✨ Ready | Blinks and waves |
+| More than 60 s idle | 💤 Sleeping | Zzz |
 
-## Uso
+## Usage
 
-- `/hud` oculta o muestra el HUD.
-- Con 90 columnas o más (y altura libre suficiente) se ve la tarjeta completa con Clawd grande; en terminales angostas pasa a una versión compacta de 3 líneas (medidores, modelo, tokens y sesión).
-- El esfuerzo aparece tras el primer pedido al modelo y se actualiza en cada uno; un modelo sin esfuerzo muestra solo su nombre.
+- `/hud` hides or shows the HUD.
+- At 90 columns or more (and enough free height) you see the full card with the big Clawd; in narrow terminals it switches to a compact 3-line version (gauges, model, tokens and session).
+- Effort appears after the first request to the model and updates on each one; a model without effort shows only its name.
 
-## Requisitos y límites
+## Requirements and limits
 
-- Claude Code con soporte de mods (function hooks), probado en la versión 2.1.304.
-- El uso de 5h y 7d solo aparece con plan Pro o Max, después de la primera respuesta de la sesión.
-- "Recargas" son los resets de las ventanas 5h y 7d; Claude Code no expone saldo de créditos extra.
-- Los tokens se cuentan desde que el mod se carga en la sesión.
-- Claude Code no ofrece un lugar fijo arriba del chat: el HUD vive en la franja sobre el prompt.
+- Claude Code with mod support (function hooks), tested on version 2.1.304.
+- 5h and 7d usage only appears on a Pro or Max plan, after the session's first response.
+- "Resets" are the 5h and 7d window resets; Claude Code does not expose an extra-credit balance.
+- Tokens are counted from when the mod loads in the session.
+- Claude Code has no fixed spot above the chat: the HUD lives in the band above the prompt.
 
-## Desarrollo
+## Development
 
 ```
-claude --plugin-dir .          # abre una sesión con el mod cargado desde esta carpeta
-claude plugin validate .       # revisa manifest y hooks
-claude plugin test .           # corre tests/hud.test.tsx
+claude --plugin-dir .          # open a session with the mod loaded from this folder
+claude plugin validate .       # check the manifest and hooks
+claude plugin test .           # run tests/hud.test.tsx
 ```
 
-| Archivo | Contenido |
+| File | Contents |
 | --- | --- |
-| `hooks/register.tsx` | Eventos (tools, turnos, mediciones de uso) y el dibujo del HUD |
-| `hooks/sprites.ts` | Pixel art de Clawd por rol y los medidores con degradado |
-| `hooks/format.ts` | Duraciones, fechas, tokens y la proyección de cada ventana |
-| `types/index.d.ts` | Los valores que el mod guarda en el estado de la sesión |
+| `hooks/register.tsx` | Events (tools, turns, usage measurements) and drawing the HUD |
+| `hooks/sprites.ts` | Clawd's pixel art per role and the gradient gauges |
+| `hooks/format.ts` | Durations, dates, tokens and each window's elapsed-time marker |
+| `types/index.d.ts` | The values the mod keeps in session state |

@@ -4,7 +4,7 @@
     "name": "johnCasana"
   },
   "metadata": {
-    "description": "Clawd HUD: uso, contexto y costo de Claude Code con un Clawd animado"
+    "description": "Clawd HUD: Claude Code usage, context and cost with an animated Clawd"
   },
   "plugins": [
     {

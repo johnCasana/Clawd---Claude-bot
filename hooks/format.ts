@@ -3,7 +3,7 @@ const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 export const FIVE_HOURS = 5 * HOUR
 export const WEEK = 7 * DAY
-const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
@@ -20,7 +20,7 @@ export function fmtWhen(at: number, now: number): string {
   const a = new Date(at)
   const hm = `${pad(a.getHours())}:${pad(a.getMinutes())}`
   const days = Math.round((startOfDay(a) - startOfDay(new Date(now))) / DAY)
-  return days === 0 ? `hoy ${hm}` : days === 1 ? `mañana ${hm}` : `${DAYS[a.getDay()]} ${a.getDate()} ${hm}`
+  return days === 0 ? `today ${hm}` : days === 1 ? `tomorrow ${hm}` : `${DAYS[a.getDay()]} ${a.getDate()} ${hm}`
 }
 
 export function fmtTokens(n: number): string {
@@ -28,9 +28,6 @@ export function fmtTokens(n: number): string {
   if (n < 1e6) return `${(n / 1e3).toFixed(n < 1e4 ? 1 : 0)}k`
   return `${(n / 1e6).toFixed(1)}M`
 }
-
-const EFFORTS: Record<string, string> = { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'muy alto', max: 'máximo' }
-export const fmtEffort = (effort: string | number) => EFFORTS[effort] ?? String(effort)
 
 export const tone = (pct: number) => (pct >= 85 ? 'error' : pct >= 60 ? 'warning' : 'success')
 
