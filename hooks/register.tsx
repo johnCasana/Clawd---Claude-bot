@@ -24,6 +24,8 @@ const TASK_ENDED = /^(completed|failed|killed)$/
 // The background column's width, shown from BG_MIN_WIDTH columns; below, the session row counts the tasks.
 const BG_COLS = 34
 const BG_MIN_WIDTH = 150
+// The whipper's shout: two rows under Clawd, shown two seconds of every nine.
+const SHOUT = ['“Tlabajal, tu tenel', 'que tlabajal”']
 const EDIT_TOOLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/
 const REVIEW = /review|audit|revis|security/i
 // The card's border takes the role's color; the operator matches the Bash prompt's border.
@@ -34,6 +36,7 @@ const ROLE_COLORS: Record<Role, ThemeKey> = {
   operator: 'bashBorder',
   explorer: 'planMode',
   director: 'permission',
+  whipper: 'permission',
   thinker: 'remember',
   shipper: 'success',
   waiting: 'warning',
@@ -65,10 +68,12 @@ function tail(text: string, n: number) {
   const chars = [...text]
   return chars.length <= n ? text : '…' + chars.slice(chars.length - n + 1).join('')
 }
-// Clawd stays awake while background work runs; a startle wears off into idle.
+// Clawd stays awake while background work runs; a startle wears off into idle. With a subagent or a task
+// at work he cracks the whip, unless a dialog, a compaction or an Esc has him.
 function shownRole(a: Activity, at: number): Role {
   if (at - pushedAt < CELEBRATE) return 'shipper'
   const role = a.role === 'startled' && at - a.since >= STARTLE ? 'idle' : a.role
+  if (agentsRunning + taskCount > 0 && !['waiting', 'startled', 'compactor'].includes(role)) return 'whipper'
   return role === 'idle' && at - a.since > SLEEP_AFTER && taskCount === 0 ? 'sleep' : role
 }
 
@@ -224,13 +229,22 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
     )
   }
 
+  const isShouting = role === 'whipper' && Math.floor(at / 1000) % 9 >= 7
   let art
   if (e.surface === 'terminal') {
     const { Raster } = $.ui.resolve(e)
     art = isWide ? (
       <Box flexDirection="column" alignItems="center" width={BIG.columns}>
         <Raster key="clawd" columns={BIG.columns} rows={BIG.rows} cells={bigFrame(role, frame, isAlarm)} />
-        <Text color={ROLE_COLORS[role]}>{clip(doing, BIG.columns)}</Text>
+        {isShouting ? (
+          SHOUT.map(line => (
+            <Text key={line} bold color="warning">
+              {line}
+            </Text>
+          ))
+        ) : (
+          <Text color={ROLE_COLORS[role]}>{clip(doing, BIG.columns)}</Text>
+        )}
       </Box>
     ) : (
       <Raster key="clawd-mini" columns={MINI.columns} rows={MINI.rows} cells={miniFrame(role, frame, isAlarm)} />

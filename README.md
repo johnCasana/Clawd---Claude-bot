@@ -65,6 +65,7 @@ The role is not written out: you see it in Clawd's animation and in the card's b
 | `Bash` | 💻 Operator | Laptop with a blinking prompt |
 | `WebSearch`, `WebFetch`, MCP tools | 🌐 Explorer | Antenna sending signals |
 | `Agent` (subagents) | 📣 Director | Megaphone and a marching mini Clawd |
+| A subagent or background task at work | 🪢 Whipper | The right arm cocks a whip back and lashes it out to the right, now and then shouting "Tlabajal, tu tenel que tlabajal" under him (not while waiting, compacting or startled) |
 | Thinking, no tools | 💭 Thinker | Cloud where the idea takes shape |
 | Successful `git push` (8 s) | 🚀 Shipper | Hops with arms up, an arrow flies up, confetti |
 | A tool waits for your permission | 🙋 Waiting | Raises a hand, a `?` blinks, the border blinks yellow, until the tool runs |

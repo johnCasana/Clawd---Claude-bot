@@ -114,6 +114,19 @@ export function bigFrame(role: Role, frame: number, isAlarm: boolean): string {
       rect(0, y, 3, 1, 'o'), px(0, y + 1, 'o'), px(2, y + 1, 'o')
       break
     }
+    case 'whipper': { // subagents or tasks at work: the right arm cocks the whip back, then lashes it out to the right
+      px(16, 7, '.'), px(17, 7, '.')
+      if (phase === 0) {
+        px(16, 6, 'o'), px(17, 5, 'o'), px(17, 4, 'o'), px(18, 3, 'b'), px(19, 2, 'b'), px(20, 1, 'b'), px(21, 1, 'b'), px(22, 2, 'b')
+      } else if (phase === 1) {
+        px(16, 6, 'o'), px(17, 5, 'o'), px(18, 5, 'b'), px(19, 4, 'b'), px(20, 4, 'b'), px(21, 5, 'b'), px(22, 6, 'b')
+      } else if (phase === 2) {
+        px(16, 7, 'o'), px(17, 7, 'o'), rect(18, 7, 6, 1, 'b'), glyph(23, 2, '*', 'y'), glyph(22, 2, '·', 'y')
+      } else {
+        px(16, 7, 'o'), px(17, 7, 'o'), px(18, 8, 'b'), px(19, 9, 'b'), px(20, 9, 'b'), px(21, 8, 'b')
+      }
+      break
+    }
     case 'thinker': // eyes up to a cloud where the idea forms: . .. ... then !
       px(6, 7, 'o'), px(13, 7, 'o')
       rect(15, 0, 5, 2, 'w'), px(14, 2, 'w')
@@ -178,6 +191,7 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   if (isBusy(role) && frame % 2) rows[2] = [...MINI_STRIDE]
   if (eyes && role === 'shipper') (eyes[0] = frame % 2 ? '*' : ' '), (eyes[8] = frame % 2 ? ' ' : '*')
   if (eyes && (role === 'waiting' || role === 'startled') && frame % 2) eyes[8] = role === 'waiting' ? '?' : '!'
+  if (eyes && role === 'whipper') eyes[8] = ['~', '≈', '—', '~'][frame % 4] ?? '~'
   if (eyes && role === 'compactor') (eyes[0] = '▸'), (eyes[8] = '◂')
   const fg = isAlarm ? COLORS.r! : COLORS.o!
   const words = new Uint32Array(MINI.columns * MINI.rows * 3)

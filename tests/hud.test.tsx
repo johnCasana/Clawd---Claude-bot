@@ -309,3 +309,23 @@ test('/hud hides the band and shows it again', async ($, on) => {
   expect((await $.command.run(hud))?.text).toContain('hidden')
   expect((await $.command.run(hud))?.text).toContain('shown')
 })
+
+test('Clawd cracks the whip while a subagent or task works', async ($, on) => {
+  const { clock } = engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.classic.Stop({
+    stop_hook_active: false,
+    background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Review auth' }],
+  })
+
+  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Tlabajal/ })).toBeUndefined()
+  await ui.unmount()
+
+  // Now and then he shouts: two seconds of every nine.
+  await clock.advance(7_000)
+  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Tlabajal, tu tenel/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /que tlabajal/ })).toBeDefined()
+  await ui.unmount()
+})

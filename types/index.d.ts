@@ -5,6 +5,7 @@ export type Role =
   | 'operator'
   | 'explorer'
   | 'director'
+  | 'whipper'
   | 'thinker'
   | 'shipper'
   | 'waiting'
