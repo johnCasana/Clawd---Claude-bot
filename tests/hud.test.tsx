@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On, ToolCallResult } from 'claude-code'
 
 import { FIVE_HOURS, elapsedPct, fmtDur } from '../hooks/format'
-import { bigFrame } from '../hooks/sprites'
+import { bigFrame, taskIcon } from '../hooks/sprites'
 
 const HOUR = 3_600_000
 const NOW = Date.parse('2026-10-19T14:00:00Z')
@@ -36,6 +36,7 @@ function engine(on: On, whileCalling = async (): Promise<ToolCallResult | void> 
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('classic.Stop', () => ({}))
   on('tool.call', async () => (await whileCalling()) ?? { result: {} })
 }
 
@@ -132,6 +133,39 @@ test('a successful push makes Clawd celebrate and names the repository, never th
   expect(await ui.find({ type: 'Text', text: /^~\/Clawd---Claude-bot$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /↑ main → johnCasana\/Clawd---Claude-bot · 0s ago/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /secret|https/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('background work gets a column with an icon per task; the list at Stop is the record', async ($, on) => {
+  const WIDE = { ...BAND, props: { ...BAND.props, bodyColumns: 160 } } as const
+  engine(on, async () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' } }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Dev server', run_in_background: true })
+
+  let ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Background/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Dev server/ })).toBeDefined()
+  expect((await ui.find({ key: 'bg-0' }))?.props.cells).toBe(taskIcon('shell', 0))
+  await ui.unmount()
+
+  // Too narrow for the column: the session row counts the tasks.
+  ui = await $.ui.mount({ ...NARROW, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /⧗ 1 in background/ })).toBeDefined()
+  await ui.unmount()
+
+  await $.classic.Stop({
+    stop_hook_active: false,
+    background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Review auth' }],
+  })
+  ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Dev server/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Review auth/ })).toBeDefined()
+  expect((await ui.find({ key: 'bg-0' }))?.props.cells).toBe(taskIcon('subagent', 0))
+  await ui.unmount()
+
+  await $.classic.Stop({ stop_hook_active: false, background_tasks: [] })
+  ui = await $.ui.mount({ ...WIDE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Background/ })).toBeUndefined()
   await ui.unmount()
 })
 

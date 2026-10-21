@@ -9,12 +9,15 @@ import type {
   Timer,
 } from 'claude-code'
 
-import type { Activity, Role } from '../types'
+import type { Activity, Role, Task } from '../types'
 import { FIVE_HOURS, WEEK, elapsedPct, fmtDur, fmtTokens, fmtWhen, tone } from './format'
-import { BIG, MINI, bigFrame, gaugeCells, miniFrame } from './sprites'
+import { BIG, MINI, bigFrame, gaugeCells, miniFrame, taskIcon } from './sprites'
 
 const SLEEP_AFTER = 60_000
 const CELEBRATE = 8_000
+// The background column's width, shown from BG_MIN_WIDTH columns; below, the session row counts the tasks.
+const BG_COLS = 34
+const BG_MIN_WIDTH = 150
 const EDIT_TOOLS = /^(Write|Edit|MultiEdit|NotebookEdit)$/
 const REVIEW = /review|audit|revis|security/i
 // The card's border takes the role's color; the operator matches the Bash prompt's border.
@@ -38,6 +41,7 @@ const cached = atom({ plugin: 'clawd-hud', key: 'cached' } as const, 0)
 // The main loop's calls in flight; the newest is captioned with its elapsed time.
 const running = atom({ plugin: 'clawd-hud', key: 'running' } as const, [])
 const push = atom({ plugin: 'clawd-hud', key: 'push' } as const, null)
+const tasks = atom({ plugin: 'clawd-hud', key: 'tasks' } as const, [])
 const counts = atom({ plugin: 'clawd-hud', key: 'counts' } as const, { edits: 0, commands: 0, tools: 0 })
 const effort = atom({ plugin: 'clawd-hud', key: 'effort' } as const, null)
 const warned = atom({ plugin: 'clawd-hud', key: 'warned' } as const, [])
@@ -52,8 +56,13 @@ function tail(text: string, n: number) {
   const chars = [...text]
   return chars.length <= n ? text : '…' + chars.slice(chars.length - n + 1).join('')
 }
+// Clawd stays awake while background work runs.
 const shownRole = (a: Activity, at: number): Role =>
-  at - pushedAt < CELEBRATE ? 'shipper' : a.role === 'idle' && at - a.since > SLEEP_AFTER ? 'sleep' : a.role
+  at - pushedAt < CELEBRATE
+    ? 'shipper'
+    : a.role === 'idle' && at - a.since > SLEEP_AFTER && taskCount === 0
+      ? 'sleep'
+      : a.role
 
 function classify(e: Record<string, unknown>): Role {
   const tool = String(e.tool)
@@ -88,6 +97,9 @@ let isBandWide = false
 let agentsRunning = 0
 let callsRunning = 0
 let pushedAt = -Infinity
+let taskCount = 0
+// The kinds of the task rows drawn with an icon, in order: the animation blits `bg-<i>`.
+let bgKinds: string[] = []
 let timers: Timer[] = []
 
 async function setActivity($: EngineInterface, role: Role) {
@@ -98,6 +110,15 @@ async function setActivity($: EngineInterface, role: Role) {
 async function refresh($: EngineInterface) {
   clockNow = await $.clock.now()
   await update($, now, () => clockNow)
+}
+
+async function setTasks($: EngineInterface, fn: (t: Task[]) => Task[]) {
+  taskCount = (await update($, tasks, fn)).length
+}
+
+async function addTask($: EngineInterface, task: Omit<Task, 'since'>) {
+  const since = await $.clock.now()
+  await setTasks($, t => [...t.filter(x => x.id !== task.id), { ...task, since }])
 }
 
 // A push the engine recognized: Clawd celebrates and the Path row names where it went.
@@ -118,17 +139,19 @@ function animate($: EngineInterface) {
   const role = shownRole(act, clockNow)
   const cells = isBandWide ? bigFrame(role, frame, isAlarm) : miniFrame(role, frame, isAlarm)
   void $.ui.blit({ requestId: bandId, key: isBandWide ? 'clawd' : 'clawd-mini', cells })
+  bgKinds.forEach((kind, i) => void $.ui.blit({ requestId: bandId!, key: `bg-${i}`, cells: taskIcon(kind, frame) }))
 }
 
 async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: boolean, width: number) {
   const { Box, Text } = $.ui.resolve(e)
-  const [at, a, tok, cache, calls, pushed, cnt, eff, cwd, model, usage] = await Promise.all([
+  const [at, a, tok, cache, calls, pushed, bg, cnt, eff, cwd, model, usage] = await Promise.all([
     read($, now),
     read($, activity),
     read($, tokens),
     read($, cached),
     read($, running),
     read($, push),
+    read($, tasks),
     read($, counts),
     read($, effort),
     $.session.cwd(),
@@ -156,7 +179,12 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
   const hours = (at - usage.startedAt) / 3_600_000
   const cost = usage.cost ? `$${usage.cost.usd.toFixed(2)}` : '—'
   const costRate = usage.cost && hours >= 0.1 ? ` · $${(usage.cost.usd / hours).toFixed(2)}/h` : ''
-  const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} edits · ${cnt.commands} commands · ${cnt.tools} tools`
+  const hasBgColumn = isWide && bg.length > 0 && width >= BG_MIN_WIDTH
+  // Eight rows: the title and seven tasks, or six and a count of the rest.
+  const bgShown = bg.length > 7 ? bg.slice(0, 6) : bg
+  bgKinds = hasBgColumn && e.surface === 'terminal' ? bgShown.map(t => t.kind) : []
+  const bgNote = bg.length && !hasBgColumn ? ` · ⧗ ${bg.length} in background` : ''
+  const session = `${fmtDur(at - usage.startedAt)} · ${cnt.edits} edits · ${cnt.commands} commands · ${cnt.tools} tools${bgNote}`
   const pctText = (pct?: number) => (
     <Text bold color={pct === undefined ? 'subtle' : tone(pct)}>
       {pct === undefined ? '  —' : `${Math.round(pct)}%`.padStart(4)}
@@ -222,8 +250,14 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
     )
   }
 
+  const taskMark = (kind: string, i: number) => {
+    if (e.surface !== 'terminal') return <Text color="claude">•</Text>
+    const { Raster } = $.ui.resolve(e)
+    return <Raster key={`bg-${i}`} columns={3} rows={1} cells={taskIcon(kind, frame)} />
+  }
+
   // Beside the mascot, inside the round border and its padding, after the label column.
-  const textCols = width - 4 - BIG.columns - 2 - 9 - 1
+  const textCols = width - 4 - BIG.columns - 2 - 9 - 1 - (hasBgColumn ? BG_COLS + 2 : 0)
   const barCols = Math.max(12, Math.min(22, Math.floor(textCols * 0.25)))
   const label = (text: string) => <Text bold>{text.padEnd(8)}</Text>
   const meter = (name: string, key: string, pct: number | undefined, mark: number | undefined, detail: string) => (
@@ -287,6 +321,26 @@ async function draw($: EngineInterface, e: RenderInput<'AbovePrompt'>, isWide: b
           </Text>
         </Box>
       </Box>
+      {hasBgColumn ? (
+        <Box flexDirection="column" width={BG_COLS} flexShrink={0}>
+          <Text bold>
+            Background <Text dimColor>{bg.length}</Text>
+          </Text>
+          {bgShown.map((t, i) => {
+            const dur = fmtDur(at - t.since)
+            return (
+              <Box key={t.id} flexDirection="row" gap={1}>
+                {taskMark(t.kind, i)}
+                <Text wrap="truncate-end">
+                  {clip(t.label, BG_COLS - 4 - dur.length - 1)}
+                  <Text dimColor> {dur}</Text>
+                </Text>
+              </Box>
+            )
+          })}
+          {bg.length > bgShown.length ? <Text dimColor>+{bg.length - bgShown.length} more</Text> : undefined}
+        </Box>
+      ) : undefined}
     </Box>
   )
 }
@@ -299,15 +353,16 @@ export const register: Register = on => {
     act = await read($, activity)
     if (!act.since) await setActivity($, 'idle')
     isAlarm = isHot((await $.session.usage()).rateLimits)
-    // A reload drops the hooks that would end the calls listed before it.
+    // A reload drops the hooks that would end the calls listed before it; background tasks outlive it.
     await update($, running, () => [])
+    taskCount = (await read($, tasks)).length
     await refresh($)
     for (const timer of timers) timer.cancel()
     timers = [
       $.clock.every(200, () => animate($)),
       $.clock.every(30_000, () => void refresh($)),
-      // Tick the caption's seconds only while a call runs.
-      $.clock.every(1_000, () => void (callsRunning && refresh($))),
+      // Tick the caption's and the tasks' seconds only while something runs.
+      $.clock.every(1_000, () => void ((callsRunning || taskCount) && refresh($))),
     ]
 
     return next(e)
@@ -353,8 +408,37 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
     if (!r.isError && r.result?.gitOperation?.push) await celebrate($, r.result)
+    const id = r.isError ? undefined : r.result?.backgroundTaskId
+    if (id) await addTask($, { id, kind: 'shell', label: e.description || e.command })
 
     return r
+  }).catch(($, e, next) => next(e))
+
+  on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
+    const r = await next(e)
+    // The record's union (its own, a plugin-raised call's, a teammate's) does not narrow on `status`: read the two fields.
+    const out = (r.isError ? undefined : r.result) as { status?: string; agentId?: string } | undefined
+    if (out?.status === 'async_launched' && out.agentId) await addTask($, { id: out.agentId, kind: 'subagent', label: e.description })
+
+    return r
+  }).catch(($, e, next) => next(e))
+
+  // Each turn's end lists the background work in flight: that list is the record, ended tasks leave it.
+  on('classic.Stop', async ($, e, next) => {
+    const list = e.background_tasks
+    if (list) {
+      const at = await $.clock.now()
+      await setTasks($, old =>
+        list.map(t => ({
+          id: t.id,
+          kind: t.type,
+          label: t.description || t.command || t.name || t.type,
+          since: old.find(o => o.id === t.id)?.since ?? at,
+        })),
+      )
+    }
+
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.complete', async ($, e, next) => {

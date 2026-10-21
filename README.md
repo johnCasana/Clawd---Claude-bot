@@ -45,6 +45,7 @@ In the desktop app: click **+** next to the prompt → **Plugins** → **Add mar
 | **Cost** | Session cost and cost per hour. |
 | **Session** | Duration, edits, commands and tools used. |
 | **Path** | The directory Claude works in and, after a `git push`, the branch and the repository it went to (`owner/repo` only, never the remote URL). |
+| **Background** | A column on the right, from 150 columns, while background work runs: each task with an animated icon (a waving mini Clawd for a subagent, `$ ⠋` for a shell, `◉))` for a monitor), its description and how long it has run. Narrower, the Session row counts them (`⧗ 2 in background`). |
 
 The gauges go from green to red. The white `▏` mark shows where you *should* be given the time elapsed in the window: if the bar passes the mark, at that pace you run out of quota before the reset.
 
@@ -65,7 +66,7 @@ The role is not written out: you see it in Clawd's animation and in the card's b
 | Thinking, no tools | 💭 Thinker | Cloud where the idea takes shape |
 | Successful `git push` (8 s) | 🚀 Shipper | Hops with arms up, an arrow flies up, confetti |
 | Turn finished | ✨ Ready | Blinks and waves |
-| More than 60 s idle | 💤 Sleeping | Zzz |
+| More than 60 s idle, nothing in the background | 💤 Sleeping | Zzz |
 
 ## Usage
 
@@ -79,6 +80,7 @@ The role is not written out: you see it in Clawd's animation and in the card's b
 - 5h and 7d usage only appears on a Pro or Max plan, after the session's first response.
 - "Resets" are the 5h and 7d window resets; Claude Code does not expose an extra-credit balance.
 - Tokens are counted from when the mod loads in the session.
+- A background task shows as soon as it launches; one that ended leaves the list when Claude's next turn ends.
 - Claude Code has no fixed spot above the chat: the HUD lives in the band above the prompt.
 
 ## Development

@@ -167,6 +167,22 @@ export function miniFrame(role: Role, frame: number, isAlarm: boolean): string {
   return toBase64(words)
 }
 
+// A background task's 3-cell icon: a mini Clawd waving for a subagent, a shell's spinner, a monitor's waves, else a turning disc.
+const SPIN = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏']
+export function taskIcon(kind: string, frame: number): string {
+  const [text, fg] =
+    kind === 'subagent'
+      ? [(frame >> 1) % 2 ? '▝█▘' : '▗█▖', COLORS.o!]
+      : kind === 'shell'
+        ? [`$ ${SPIN[frame % SPIN.length]}`, COLORS.e!]
+        : kind === 'monitor'
+          ? [['◉  ', '◉) ', '◉))'][(frame >> 1) % 3] ?? '◉  ', COLORS.c!]
+          : [['◐', '◓', '◑', '◒'][frame % 4] ?? '◐', COLORS.y!]
+  const words = new Uint32Array(9)
+  ;[...text.padEnd(3)].slice(0, 3).forEach((ch, c) => words.set([ch.codePointAt(0) ?? 0x20, fg, NONE], c * 3))
+  return toBase64(words)
+}
+
 function encode(grid: string[][], glyphs: Glyph[]): string {
   const columns = grid[0]?.length ?? 0
   const rows = grid.length / 2
